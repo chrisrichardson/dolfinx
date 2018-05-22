@@ -227,7 +227,8 @@ public:
   ///         The value to multiply to coordinate by.
   /// @param component (std::size_t)
   ///         The coordinate index.
-  void set_x(la::PETScVector& x, double value, std::size_t component) const;
+  void set_x(la::PETScVector& x, PetscScalar value,
+             std::size_t component) const;
 
   /// Return informal string representation (pretty-print)
   ///

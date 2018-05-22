@@ -23,7 +23,7 @@ namespace mesh
 {
 class Mesh;
 class Cell;
-}
+} // namespace mesh
 
 namespace function
 {
@@ -67,16 +67,20 @@ public:
                     const mesh::Cell& cell) const;
 
   /// Evaluate at given point
-  virtual void eval(Eigen::Ref<EigenRowArrayXXd> values,
+  virtual void eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic,
+                                            Eigen::Dynamic, Eigen::RowMajor>>
+                        values,
                     Eigen::Ref<const EigenRowArrayXXd> x) const;
 
   /// Restrict function to local cell (compute expansion coefficients w)
   virtual void
-  restrict(double* w, const fem::FiniteElement& element, const mesh::Cell& cell,
+  restrict(PetscScalar* w, const fem::FiniteElement& element,
+           const mesh::Cell& cell,
            const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const = 0;
 
   /// Compute values at all mesh vertices
-  virtual EigenRowArrayXXd
+  virtual Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic,
+                       Eigen::RowMajor>
   compute_point_values(const mesh::Mesh& mesh) const = 0;
 
   //--- Optional functions to be implemented by sub-classes ---
@@ -94,5 +98,5 @@ public:
   /// Pointer to FunctionSpace, if appropriate, otherwise NULL
   virtual std::shared_ptr<const FunctionSpace> function_space() const = 0;
 };
-}
-}
+} // namespace function
+} // namespace dolfin

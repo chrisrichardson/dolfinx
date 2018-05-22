@@ -21,7 +21,7 @@ namespace mesh
 {
 class Cell;
 class Mesh;
-}
+} // namespace mesh
 
 namespace function
 {
@@ -69,7 +69,9 @@ public:
   ///         The coordinates of the point.
   /// @param    cell (mesh::Cell)
   ///         The cell which contains the given point.
-  virtual void eval(Eigen::Ref<EigenRowArrayXXd> values,
+  virtual void eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic,
+                                            Eigen::Dynamic, Eigen::RowMajor>>
+                        values,
                     Eigen::Ref<const EigenRowArrayXXd> x,
                     const dolfin::mesh::Cell& cell) const override;
 
@@ -79,7 +81,9 @@ public:
   ///         The values at the point.
   /// @param x (Eigen::Ref<const Eigen::VectorXd>)
   ///         The coordinates of the point.
-  virtual void eval(Eigen::Ref<EigenRowArrayXXd> values,
+  virtual void eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic,
+                                            Eigen::Dynamic, Eigen::RowMajor>>
+                        values,
                     Eigen::Ref<const EigenRowArrayXXd> x) const override;
 
   /// Return value rank.
@@ -106,12 +110,12 @@ public:
   /// Property setter for type "double"
   /// Used in pybind11 Python interface to attach a value to a python attribute
   ///
-  virtual void set_property(std::string name, double value);
+  virtual void set_property(std::string name, PetscScalar value);
 
   /// Property getter for type "double"
   /// Used in pybind11 Python interface to get the value of a python attribute
   ///
-  virtual double get_property(std::string name) const;
+  virtual PetscScalar get_property(std::string name) const;
 
   /// Property setter for type "GenericFunction"
   /// Used in pybind11 Python interface to attach a value to a python attribute
@@ -136,7 +140,7 @@ public:
   /// @param  coordinate_dofs (double*)
   ///         The coordinates
   virtual void restrict(
-      double* w, const fem::FiniteElement& element,
+      PetscScalar* w, const fem::FiniteElement& element,
       const mesh::Cell& dolfin_cell,
       const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const override;
 
@@ -146,7 +150,8 @@ public:
   ///         The mesh.
   /// @returns    vertex_values (EigenRowArrayXXd)
   ///         The values at all vertices.
-  virtual EigenRowArrayXXd
+  virtual Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic,
+                       Eigen::RowMajor>
   compute_point_values(const mesh::Mesh& mesh) const override;
 
   /// Return shared pointer to function space (NULL)
@@ -160,5 +165,5 @@ private:
   // Value shape
   std::vector<std::size_t> _value_shape;
 };
-}
-}
+} // namespace function
+} // namespace dolfin
