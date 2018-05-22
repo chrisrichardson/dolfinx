@@ -486,8 +486,9 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
   // matrix
   std::vector<std::vector<dolfin::la_index_t>> col_indices(
       m_owned, std::vector<dolfin::la_index_t>(eldim));
-  std::vector<std::vector<double>> values(m_owned, std::vector<double>(eldim));
-  std::vector<double> temp_values(eldim * data_size);
+  std::vector<std::vector<PetscScalar>> values(m_owned,
+                                               std::vector<PetscScalar>(eldim));
+  std::vector<PetscScalar> temp_values(eldim * data_size);
 
   // Initialise global sparsity pattern: record on-process and
   // off-process dependencies of fine dofs
