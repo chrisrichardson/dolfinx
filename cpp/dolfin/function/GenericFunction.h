@@ -62,7 +62,8 @@ public:
   virtual std::vector<std::size_t> value_shape() const = 0;
 
   /// Evaluate at given point in given cell
-  virtual void eval(Eigen::Ref<EigenRowArrayXXd> values,
+  virtual void eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic,
+                                            Eigen::Dynamic, Eigen::RowMajor>> values,
                     Eigen::Ref<const EigenRowArrayXXd> x,
                     const mesh::Cell& cell) const;
 
