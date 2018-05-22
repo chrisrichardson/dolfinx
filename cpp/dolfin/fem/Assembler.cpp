@@ -351,7 +351,7 @@ void Assembler::assemble(la::PETScMatrix& A, BlockType block_type)
         }
       }
 
-      double one = 1.0;
+      PetscScalar one = 1.0;
       for (auto bc : boundary_values)
       {
         PetscInt row = bc.first;
@@ -422,7 +422,7 @@ void Assembler::assemble(la::PETScVector& b, BlockType block_type)
         // this->assemble(_b_array, *_l[i]);
         // VecRestoreArray(sub_b, &b_array);
 
-        EigenVectorXd _b_array(map_size * bs);
+        Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> _b_array(map_size * bs);
         _b_array.setZero();
         this->assemble(_b_array, *_l[i]);
 
@@ -465,7 +465,7 @@ void Assembler::assemble(la::PETScVector& b, BlockType block_type)
         auto map_size = map->size(common::IndexMap::MapSize::ALL);
 
         // Assemble
-        EigenVectorXd b_local(map_size);
+        Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> b_local(map_size);
         b_local.setZero();
         this->assemble(b_local, *_l[i]);
 
@@ -506,7 +506,7 @@ void Assembler::assemble(la::PETScVector& b, BlockType block_type)
     // double* b_array;
     // VecGetArray(b.vec(), &b_array);
     // Eigen::Map<EigenVectorXd> _b_array(b_array, map_size);
-    EigenVectorXd _b_array(map_size * bs);
+    Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> _b_array(map_size * bs);
     _b_array.setZero();
     this->assemble(_b_array, *_l[0]);
 
@@ -587,7 +587,8 @@ void Assembler::assemble(la::PETScMatrix& A, const Form& a,
 
   // Data structures used in assembly
   EigenRowArrayXXd coordinate_dofs;
-  EigenRowMatrixXd Ae;
+  Eigen::Matrix<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      Ae;
 
   // Iterate over all cells
   for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
@@ -684,10 +685,12 @@ void Assembler::assemble(la::PETScMatrix& A, const Form& a,
   // A.apply(la::PETScMatrix::AssemblyType::FINAL);
 }
 //-----------------------------------------------------------------------------
-void Assembler::assemble(Eigen::Ref<EigenVectorXd> b, const Form& L)
+template <typename Derived>
+void Assembler::assemble(Eigen::MatrixBase<Derived> b, const Form& L)
 {
   // if (b.empty())
   //  init(b, L);
+  typedef typename Derived::Scalar Scalar;
 
   // Get mesh from form
   assert(L.mesh());
@@ -701,7 +704,7 @@ void Assembler::assemble(Eigen::Ref<EigenVectorXd> b, const Form& L)
 
   // Data structures used in assembly
   EigenRowArrayXXd coordinate_dofs;
-  EigenVectorXd be;
+  Eigen::Matrix<Scalar, Eigen::Dynamic, 1> be;
 
   // Iterate over all cells
   for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
@@ -760,8 +763,9 @@ void Assembler::apply_bc(la::PETScVector& b, const Form& a,
   auto dofmap0 = a.function_space(0)->dofmap();
   auto dofmap1 = a.function_space(1)->dofmap();
 
-  EigenRowMatrixXd Ae;
-  EigenVectorXd be;
+  Eigen::Matrix<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      Ae;
+  Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> be;
   EigenRowArrayXXd coordinate_dofs;
 
   // Iterate over all cells
@@ -863,7 +867,7 @@ void Assembler::set_bc(la::PETScVector& b, const Form& L,
     }
   }
 
-  std::vector<double> values;
+  std::vector<PetscScalar> values;
   values.reserve(boundary_values.size());
   std::vector<la_index_t> rows;
   rows.reserve(boundary_values.size());

@@ -268,7 +268,7 @@ public:
   ///    Coordinates of the cell
   ///
   void
-  tabulate_tensor(double* A, mesh::Cell cell,
+  tabulate_tensor(PetscScalar* A, mesh::Cell cell,
                   Eigen::Ref<const EigenRowArrayXXd> coordinate_dofs) const;
 
 private:
@@ -307,8 +307,8 @@ private:
   void init_coeff_scratch_space();
 
   // Temporary storage for coefficient values
-  std::vector<double> _w;
-  std::vector<double*> _wpointer;
+  std::vector<PetscScalar> _w;
+  std::vector<PetscScalar*> _wpointer;
 
 };
 } // namespace fem

@@ -61,7 +61,8 @@ private:
                        std::vector<std::shared_ptr<const DirichletBC>> bcs);
 
   // Assemble vector
-  static void assemble(Eigen::Ref<EigenVectorXd> b, const Form& L);
+  template <typename Derived>
+  void assemble(Eigen::MatrixBase<Derived> b, const Form& L);
 
   // Modify RHS vector to account for boundary condition (b <- b - Ax,
   // where x holds prescribed boundary values)

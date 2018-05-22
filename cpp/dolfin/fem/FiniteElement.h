@@ -166,7 +166,7 @@ public:
   // FIXME: pass coordinate map
   /// TODO: Remove? Document. See:
   /// ffc/uflacs/backends/ufc/evaluatedof.py:_change_variables()
-  void map_dofs(double* values, const Eigen::Ref<const EigenRowArrayXXd>& vals,
+  void map_dofs(PetscScalar* values, const Eigen::Ref<const Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& vals,
                 const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const
   {
     assert(_ufc_element);

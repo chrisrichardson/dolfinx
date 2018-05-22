@@ -9,6 +9,7 @@
 #include <Eigen/Dense>
 #include <functional>
 #include <memory>
+#include <petscis.h>
 #include <vector>
 
 struct ufc_cell_integral;
@@ -54,7 +55,7 @@ public:
   ///    Integral number
   /// @returns std::function
   ///    Function to call for tabulate_tensor on a cell
-  const std::function<void(double*, const double* const*, const double*, int)>&
+  const std::function<void(PetscScalar*, const PetscScalar* const*, const double*, int)>&
   cell_tabulate_tensor(int i) const;
 
   /// Get the enabled coefficients on cell integral i
@@ -65,7 +66,7 @@ public:
   const bool* cell_enabled_coefficients(int i) const;
 
   /// Set the function for 'tabulate_tensor' for cell integral i
-  void set_cell_tabulate_tensor(int i, void (*fn)(double*, const double* const*,
+  void set_cell_tabulate_tensor(int i, void (*fn)(PetscScalar*, const PetscScalar* const*,
                                                   const double*, int));
 
   /// Number of integrals of given type
@@ -112,7 +113,7 @@ private:
 
   // Function pointers to cell tabulate_tensor functions
   std::vector<
-      std::function<void(double*, const double* const*, const double*, int)>>
+      std::function<void(PetscScalar*, const PetscScalar* const*, const double*, int)>>
       _cell_tabulate_tensor;
 
   // Storage for enabled coefficients, to match the functions

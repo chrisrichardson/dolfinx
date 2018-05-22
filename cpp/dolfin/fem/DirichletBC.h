@@ -101,7 +101,7 @@ class DirichletBC : public common::Variable
 
 public:
   /// map type used by DirichletBC
-  typedef std::unordered_map<std::size_t, double> Map;
+  typedef std::unordered_map<std::size_t, PetscScalar> Map;
 
   /// Method of boundary condition application
   enum class Method
@@ -316,7 +316,7 @@ private:
     LocalData(const function::FunctionSpace& V);
 
     // Coefficients
-    std::vector<double> w;
+    std::vector<PetscScalar> w;
 
     // mesh::Facet dofs
     std::vector<int> facet_dofs;

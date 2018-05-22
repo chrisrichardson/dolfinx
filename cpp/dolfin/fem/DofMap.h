@@ -223,9 +223,9 @@ public:
   ///
   /// @param  x (la::PETScVector)
   ///         The vector to set.
-  /// @param  value (double)
+  /// @param  value (PetscScalar)
   ///         The value to set.
-  void set(la::PETScVector& x, double value) const;
+  void set(la::PETScVector& x, PetscScalar value) const;
 
   /// Return the map (const access)
   std::shared_ptr<const common::IndexMap> index_map() const;
