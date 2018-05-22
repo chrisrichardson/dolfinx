@@ -6,6 +6,8 @@
 
 #pragma once
 
+#ifndef PETSC_USE_COMPLEX
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -656,3 +658,5 @@ inline void HDF5Interface::get_attribute_value(const hid_t attr_type,
 #endif
 }
 }
+
+#endif

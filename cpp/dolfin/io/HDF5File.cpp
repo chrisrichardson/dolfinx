@@ -36,6 +36,7 @@
 using namespace dolfin;
 using namespace dolfin::io;
 
+#ifndef PETSC_USE_COMPLEX
 //-----------------------------------------------------------------------------
 HDF5File::HDF5File(MPI_Comm comm, const std::string filename,
                    const std::string file_mode)
@@ -1594,3 +1595,4 @@ bool HDF5File::get_mpi_atomicity() const
   return HDF5Interface::get_mpi_atomicity(_hdf5_file_id);
 }
 //-----------------------------------------------------------------------------
+#endif

@@ -26,6 +26,7 @@
 using namespace dolfin;
 using namespace dolfin::io;
 
+#ifndef PETSC_USE_COMPLEX
 //----------------------------------------------------------------------------
 void VTKWriter::write_mesh(const mesh::Mesh& mesh, std::size_t cell_dim,
                            std::string filename)
@@ -266,3 +267,5 @@ std::uint8_t VTKWriter::vtk_cell_type(const mesh::Mesh& mesh,
   return vtk_cell_type;
 }
 //----------------------------------------------------------------------------
+
+#endif

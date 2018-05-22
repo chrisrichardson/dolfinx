@@ -39,6 +39,7 @@
 using namespace dolfin;
 using namespace dolfin::io;
 
+#ifndef PETSC_USE_COMPLEX
 //-----------------------------------------------------------------------------
 XDMFFile::XDMFFile(MPI_Comm comm, const std::string filename)
     : _mpi_comm(comm), _filename(filename), _counter(0),
@@ -2979,3 +2980,5 @@ std::string XDMFFile::rank_to_string(std::size_t value_rank)
   return "Tensor";
 }
 //-----------------------------------------------------------------------------
+
+#endif
