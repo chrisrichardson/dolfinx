@@ -685,12 +685,11 @@ void Assembler::assemble(la::PETScMatrix& A, const Form& a,
   // A.apply(la::PETScMatrix::AssemblyType::FINAL);
 }
 //-----------------------------------------------------------------------------
-template <typename Derived>
-void Assembler::assemble(Eigen::MatrixBase<Derived> b, const Form& L)
+void Assembler::assemble(Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> b,
+                         const Form& L)
 {
   // if (b.empty())
   //  init(b, L);
-  typedef typename Derived::Scalar Scalar;
 
   // Get mesh from form
   assert(L.mesh());
@@ -704,7 +703,7 @@ void Assembler::assemble(Eigen::MatrixBase<Derived> b, const Form& L)
 
   // Data structures used in assembly
   EigenRowArrayXXd coordinate_dofs;
-  Eigen::Matrix<Scalar, Eigen::Dynamic, 1> be;
+  Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> be;
 
   // Iterate over all cells
   for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
