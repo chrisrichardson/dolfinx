@@ -86,7 +86,7 @@ void Assembler::assemble(la::PETScMatrix& A, BlockType block_type)
         {
           la::PETScMatrix mat(subA);
           this->assemble(mat, *_a[i][j], _bcs);
-          //mat.apply(la::PETScMatrix::AssemblyType::FINAL);
+          // mat.apply(la::PETScMatrix::AssemblyType::FINAL);
         }
         else
         {
@@ -137,7 +137,7 @@ void Assembler::assemble(la::PETScMatrix& A, BlockType block_type)
 
     // MPI::barrier(MPI_COMM_WORLD);
     std::int64_t offset_row = 0;
-    std::cout << "**** mat size: " << A.size(0) << ", " << A.size(1)
+    std::cout << "**** mat size: " << A.size()[0] << ", " << A.size()[0]
               << std::endl;
     for (std::size_t i = 0; i < _a.size(); ++i)
     {
@@ -384,11 +384,11 @@ void Assembler::assemble(la::PETScVector& b, BlockType block_type)
 
     // Initialise vector
     if (block_type == BlockType::nested)
-      fem::init_nest(b, forms);
+      b = fem::init_nest(forms);
     else if (block_vector and block_type == BlockType::monolithic)
-      fem::init_monolithic(b, forms);
+      b = fem::init_monolithic(forms);
     else
-      init(b, *_l[0]);
+      b = fem::init_vector(*_l[0]);
   }
 
   // auto range = b.local_range();
