@@ -63,7 +63,8 @@ public:
 
   /// Evaluate at given point in given cell
   virtual void eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic,
-                                            Eigen::Dynamic, Eigen::RowMajor>> values,
+                                            Eigen::Dynamic, Eigen::RowMajor>>
+                        values,
                     Eigen::Ref<const EigenRowArrayXXd> x,
                     const mesh::Cell& cell) const;
 

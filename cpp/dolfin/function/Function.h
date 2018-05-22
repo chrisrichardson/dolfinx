@@ -10,6 +10,7 @@
 #include <Eigen/Dense>
 #include <dolfin/common/types.h>
 #include <memory>
+#include <petscsys.h>
 #include <vector>
 
 namespace dolfin

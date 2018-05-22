@@ -81,7 +81,9 @@ std::vector<PetscScalar> Constant::values() const
   return _values;
 }
 //-----------------------------------------------------------------------------
-void Constant::eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> values,
+void Constant::eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic,
+                                            Eigen::Dynamic, Eigen::RowMajor>>
+                        values,
                     Eigen::Ref<const EigenRowArrayXXd> x) const
 {
   // Copy values

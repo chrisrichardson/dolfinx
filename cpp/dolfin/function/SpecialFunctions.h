@@ -9,6 +9,7 @@
 #include "Expression.h"
 #include <Eigen/Dense>
 #include <memory>
+#include <petscsys.h>
 
 namespace dolfin
 {

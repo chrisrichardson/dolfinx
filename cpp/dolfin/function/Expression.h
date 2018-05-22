@@ -8,6 +8,7 @@
 
 #include "GenericFunction.h"
 #include <Eigen/Dense>
+#include <petscsys.h>
 #include <vector>
 
 namespace dolfin

@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
+#include <petscsys.h>
 #include <vector>
 
 #include <dolfin/common/Variable.h>

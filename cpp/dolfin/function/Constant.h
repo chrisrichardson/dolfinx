@@ -8,6 +8,7 @@
 
 #include "Expression.h"
 #include <Eigen/Dense>
+#include <petscsys.h>
 #include <vector>
 
 namespace dolfin
@@ -77,7 +78,9 @@ public:
 
   //--- Implementation of Expression interface ---
 
-  void eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> values,
+  void eval(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic,
+                                    Eigen::RowMajor>>
+                values,
             Eigen::Ref<const EigenRowArrayXXd> x) const override;
 
   virtual std::string str(bool verbose) const override;
