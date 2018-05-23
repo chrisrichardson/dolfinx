@@ -61,7 +61,8 @@ private:
                        std::vector<std::shared_ptr<const DirichletBC>> bcs);
 
   // Assemble vector
-  void assemble(Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> b, const Form& L);
+  void assemble(Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b,
+                const Form& L);
 
   // Modify RHS vector to account for boundary condition (b <- b - Ax,
   // where x holds prescribed boundary values)

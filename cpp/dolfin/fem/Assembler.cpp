@@ -685,7 +685,7 @@ void Assembler::assemble(la::PETScMatrix& A, const Form& a,
   // A.apply(la::PETScMatrix::AssemblyType::FINAL);
 }
 //-----------------------------------------------------------------------------
-void Assembler::assemble(Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> b,
+void Assembler::assemble(Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b,
                          const Form& L)
 {
   // if (b.empty())
