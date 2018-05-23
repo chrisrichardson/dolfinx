@@ -9,8 +9,8 @@
 #include <Eigen/Dense>
 #include <dolfin/common/Variable.h>
 #include <dolfin/common/types.h>
-#include <petscsys.h>
 #include <memory>
+#include <petscsys.h>
 #include <vector>
 
 namespace dolfin

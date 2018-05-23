@@ -25,7 +25,7 @@ namespace la
 {
 class PETScMatrix;
 class PETScVector;
-}
+} // namespace la
 
 namespace common
 {
@@ -45,7 +45,7 @@ class Facet;
 class Mesh;
 template <typename T>
 class MeshFunction;
-}
+} // namespace mesh
 
 namespace fem
 {
@@ -165,7 +165,8 @@ private:
   // and lhs has no facet integrals
   static void matrix_block_add(
       la::PETScMatrix& tensor, std::vector<PetscScalar>& Ae,
-      std::vector<PetscScalar>& macro_A, const std::array<bool, 2>& add_local_tensor,
+      std::vector<PetscScalar>& macro_A,
+      const std::array<bool, 2>& add_local_tensor,
       const std::array<std::vector<common::ArrayView<const la_index_t>>, 2>&
           cell_dofs);
 
@@ -186,5 +187,5 @@ private:
                        const std::vector<DirichletBC::Map>& boundary_values,
                        const common::ArrayView<const dolfin::la_index_t>& dofs);
 };
-}
-}
+} // namespace fem
+} // namespace dolfin

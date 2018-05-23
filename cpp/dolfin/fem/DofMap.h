@@ -155,7 +155,8 @@ public:
   /// @param     cell_index (std::size_t)
   ///         The cell index.
   ///
-  /// @return         Eigen::Map<const Eigen::Array<dolfin::la_index_t, Eigen::Dynamic, 1>>
+  /// @return         Eigen::Map<const Eigen::Array<dolfin::la_index_t,
+  /// Eigen::Dynamic, 1>>
   Eigen::Map<const Eigen::Array<dolfin::la_index_t, Eigen::Dynamic, 1>>
   cell_dofs(std::size_t cell_index) const
   {

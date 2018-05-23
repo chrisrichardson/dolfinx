@@ -88,5 +88,5 @@ public:
   /// The form
   const Form& dolfin_form;
 };
-}
-}
+} // namespace fem
+} // namespace dolfin

@@ -21,7 +21,7 @@ namespace function
 {
 class GenericFunction;
 class FunctionSpace;
-}
+} // namespace function
 
 namespace mesh
 {
@@ -29,7 +29,7 @@ class Facet;
 template <typename T>
 class MeshFunction;
 class SubDomain;
-}
+} // namespace mesh
 
 namespace fem
 {
@@ -325,5 +325,5 @@ private:
     EigenRowArrayXXd coordinates;
   };
 };
-}
-}
+} // namespace fem
+} // namespace dolfin

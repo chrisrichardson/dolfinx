@@ -34,8 +34,8 @@ void VectorSpaceBasis::orthonormalize(double tol)
     }
 
     // Normalise basis function
-   const PetscReal norm = _basis[i]->normalize();
-    if (norm  < tol)
+    const PetscReal norm = _basis[i]->normalize();
+    if (norm < tol)
     {
       throw std::runtime_error(
           "VectorSpaceBasis has linear dependency. Cannot orthogonalize");

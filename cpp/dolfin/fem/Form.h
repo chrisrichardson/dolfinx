@@ -309,7 +309,6 @@ private:
   // Temporary storage for coefficient values
   std::vector<PetscScalar> _w;
   std::vector<PetscScalar*> _wpointer;
-
 };
 } // namespace fem
 } // namespace dolfin

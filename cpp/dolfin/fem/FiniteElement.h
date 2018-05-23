@@ -166,8 +166,11 @@ public:
   // FIXME: pass coordinate map
   /// TODO: Remove? Document. See:
   /// ffc/uflacs/backends/ufc/evaluatedof.py:_change_variables()
-  void map_dofs(PetscScalar* values, const Eigen::Ref<const Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& vals,
-                const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const
+  void map_dofs(
+      PetscScalar* values,
+      const Eigen::Ref<const Eigen::Array<
+          PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& vals,
+      const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const
   {
     assert(_ufc_element);
     _ufc_element->map_dofs(values, vals.data(), coordinate_dofs.data(), 1,
@@ -214,5 +217,5 @@ private:
   // Simple hash of the signature string
   std::size_t _hash;
 };
-}
-}
+} // namespace fem
+} // namespace dolfin

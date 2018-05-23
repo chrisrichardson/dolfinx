@@ -10,8 +10,8 @@
 #include <cstddef>
 #include <map>
 #include <memory>
-#include <unordered_map>
 #include <petscsys.h>
+#include <unordered_map>
 #include <vector>
 
 #include <dolfin/common/Variable.h>

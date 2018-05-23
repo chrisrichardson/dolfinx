@@ -982,7 +982,8 @@ void SystemAssembler::compute_interior_facet_tensor(
 //-----------------------------------------------------------------------------
 void SystemAssembler::matrix_block_add(
     la::PETScMatrix& tensor, std::vector<PetscScalar>& Ae,
-    std::vector<PetscScalar>& macro_A, const std::array<bool, 2>& add_local_tensor,
+    std::vector<PetscScalar>& macro_A,
+    const std::array<bool, 2>& add_local_tensor,
     const std::array<std::vector<common::ArrayView<const la_index_t>>, 2>&
         cell_dofs)
 {
@@ -1008,7 +1009,8 @@ void SystemAssembler::matrix_block_add(
 }
 //-----------------------------------------------------------------------------
 void SystemAssembler::apply_bc(
-    PetscScalar* A, PetscScalar* b, const std::vector<DirichletBC::Map>& boundary_values,
+    PetscScalar* A, PetscScalar* b,
+    const std::vector<DirichletBC::Map>& boundary_values,
     const common::ArrayView<const dolfin::la_index_t>& global_dofs0,
     const common::ArrayView<const dolfin::la_index_t>& global_dofs1)
 {
@@ -1016,11 +1018,11 @@ void SystemAssembler::apply_bc(
   assert(b);
 
   // Wrap matrix and vector using Eigen
-  Eigen::Map<
-      Eigen::Matrix<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+  Eigen::Map<Eigen::Matrix<PetscScalar, Eigen::Dynamic, Eigen::Dynamic,
+                           Eigen::RowMajor>>
       _matA(A, global_dofs0.size(), global_dofs1.size());
-  Eigen::Map<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>>
-      _b(b, global_dofs0.size());
+  Eigen::Map<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> _b(
+      b, global_dofs0.size());
 
   if (boundary_values.size() == 1)
   {

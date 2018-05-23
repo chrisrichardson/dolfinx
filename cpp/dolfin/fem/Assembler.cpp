@@ -75,7 +75,6 @@ void Assembler::assemble(la::PETScMatrix& A, BlockType block_type)
       std::cout << "Star matrix assembly (6)" << std::endl;
       A = init_matrix(*_a[0][0]);
       std::cout << "Star matrix assembly (7)" << std::endl;
-
     }
   }
 
@@ -679,14 +678,16 @@ void Assembler::assemble(Vec b, const Form& L)
 
   PetscInt size;
   VecGetSize(b, &size);
-  Eigen::Map<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b_array(values, size);
+  Eigen::Map<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b_array(values,
+                                                                    size);
 
   assemble(b_array, L);
 
   VecRestoreArray(b, &values);
 }
 //-----------------------------------------------------------------------------
-void Assembler::assemble(Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b, const Form& L)
+void Assembler::assemble(
+    Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b, const Form& L)
 {
   // if (b.empty())
   //  init(b, L);
