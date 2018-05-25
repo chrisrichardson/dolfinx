@@ -9,11 +9,14 @@
 #include <dolfin/common/MPI.h>
 #include <dolfin/common/types.h>
 #include <memory>
+#include <petscsys.h>
 #include <set>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+using ufc_scalar = PetscScalar;
 
 struct ufc_dofmap;
 

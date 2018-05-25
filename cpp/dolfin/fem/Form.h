@@ -13,8 +13,11 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <petscsys.h>
 #include <string>
 #include <vector>
+
+using ufc_scalar = PetscScalar;
 
 // Forward declaration
 struct ufc_form;
