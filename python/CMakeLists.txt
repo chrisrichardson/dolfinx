@@ -20,18 +20,18 @@ pybind11_add_module(cpp SHARED
   src/dolfin.cpp
   src/parameter.cpp
   src/common.cpp
-  src/fem.cpp
-  src/function.cpp
+  #src/fem.cpp
+  #src/function.cpp
   src/generation.cpp
   src/geometry.cpp
   src/graph.cpp
   src/log.cpp
   src/math.cpp
   src/mesh.cpp
-  src/io.cpp
+  #src/io.cpp
   src/la.cpp
-  src/nls.cpp
-  src/refinement.cpp
+  #src/nls.cpp
+  #src/refinement.cpp
   src/MPICommWrapper.cpp)
 
 # Add DOLFIN libraries and other config

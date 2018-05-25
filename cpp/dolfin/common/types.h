@@ -24,6 +24,9 @@ using la_index_t = PetscInt;
 using la_index_t = std::int32_t;
 #endif
 
+// Typedef for ufc_scalar
+using ufc_scalar = PetscScalar;
+
 // Typedefs for Eigen
 
 // bool Arrays

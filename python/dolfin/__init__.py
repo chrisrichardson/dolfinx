@@ -37,16 +37,16 @@ from .cpp.common import (Variable, has_debug, has_hdf5, has_scotch,
                          git_commit_hash, DOLFIN_EPS, DOLFIN_PI, TimingType,
                          timing, timings, list_timings)
 
-if has_hdf5():
-    from .cpp.io import HDF5File
+# if has_hdf5():
+#     from .cpp.io import HDF5File
 
 from .cpp import MPI
-from .cpp.function import (Expression, Constant)
-from .cpp.fem import (FiniteElement, DofMap)
+# from .cpp.function import (Expression, Constant)
+# from .cpp.fem import (FiniteElement, DofMap)
 
-from .cpp.geometry import BoundingBoxTree, Point
-from .cpp.generation import IntervalMesh, BoxMesh, RectangleMesh
-from .cpp.io import XDMFFile, VTKFile
+# from .cpp.geometry import BoundingBoxTree, Point
+# from .cpp.generation import IntervalMesh, BoxMesh, RectangleMesh
+# from .cpp.io import XDMFFile, VTKFile
 
 if has_slepc():
     from .cpp.la import SLEPcEigenSolver
@@ -57,31 +57,31 @@ from .cpp.mesh import (Mesh, MeshTopology, MeshGeometry, CellType, Cell, Facet,
                        FaceRange, EdgeRange, VertexRange, EntityRange,
                        SubDomain, MeshQuality, PeriodicBoundaryComputation)
 
-from .cpp.nls import (NonlinearProblem, NewtonSolver, OptimisationProblem)
+# from .cpp.nls import (NonlinearProblem, NewtonSolver, OptimisationProblem)
 
-from .fem.form import Form
-from .fem.dirichletbc import DirichletBC, AutoSubDomain
-from .fem.interpolation import interpolate
-from .fem.projection import project
-from .fem.solving import solve
-from .fem.formmanipulations import (derivative, adjoint, increase_order, tear)
+# from .fem.form import Form
+# from .fem.dirichletbc import DirichletBC, AutoSubDomain
+# from .fem.interpolation import interpolate
+# from .fem.projection import project
+# from .fem.solving import solve
+# from .fem.formmanipulations import (derivative, adjoint, increase_order, tear)
 
-from .function.functionspace import (FunctionSpace, VectorFunctionSpace,
-                                     TensorFunctionSpace)
-from .function.function import Function
-from .function.argument import (TestFunction, TrialFunction, TestFunctions,
-                                TrialFunctions)
-from .function.constant import Constant
-from .function.specialfunctions import (
-    MeshCoordinates, FacetArea, FacetNormal, CellVolume, SpatialCoordinate,
-    CellNormal, CellDiameter, Circumradius, MinCellEdgeLength,
-    MaxCellEdgeLength, MinFacetEdgeLength, MaxFacetEdgeLength)
-from .function.expression import Expression, UserExpression, CompiledExpression
+# from .function.functionspace import (FunctionSpace, VectorFunctionSpace,
+#                                      TensorFunctionSpace)
+# from .function.function import Function
+# from .function.argument import (TestFunction, TrialFunction, TestFunctions,
+#                                 TrialFunctions)
+# from .function.constant import Constant
+# from .function.specialfunctions import (
+#     MeshCoordinates, FacetArea, FacetNormal, CellVolume, SpatialCoordinate,
+#     CellNormal, CellDiameter, Circumradius, MinCellEdgeLength,
+#     MaxCellEdgeLength, MinFacetEdgeLength, MaxFacetEdgeLength)
+# from .function.expression import Expression, UserExpression, CompiledExpression
 
-from .generation import UnitIntervalMesh, UnitSquareMesh, UnitCubeMesh
+# from .generation import UnitIntervalMesh, UnitSquareMesh, UnitCubeMesh
 
-# experimental
-from .jit.pybind11jit import compile_cpp_code
+# # experimental
+# from .jit.pybind11jit import compile_cpp_code
 
 #from .la import la_index_dtype
 from .mesh import MeshFunction

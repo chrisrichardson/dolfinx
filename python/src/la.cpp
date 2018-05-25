@@ -15,6 +15,7 @@
 #endif
 
 #include "casters.h"
+#include <dolfin/common/types.h>
 #include <dolfin/common/IndexMap.h>
 #include <dolfin/la/PETScKrylovSolver.h>
 #include <dolfin/la/PETScMatrix.h>
