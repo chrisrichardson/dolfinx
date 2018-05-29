@@ -19,7 +19,7 @@
 using namespace dolfin;
 using namespace dolfin::io;
 
-#ifndef PETSC_USE_COMPLEX
+
 //-----------------------------------------------------------------------------
 std::pair<std::vector<std::size_t>, std::vector<std::size_t>>
 HDF5Utility::map_gdof_to_cell(
@@ -359,10 +359,10 @@ void HDF5Utility::set_local_vector_values(
       vector_values[rindex[j] - vector_range[0]] = rval[j];
     }
   }
-
+  #ifndef PETSC_USE_COMPLEX
   x.set_local(vector_values);
+  #endif
   x.apply();
 }
 //-----------------------------------------------------------------------------
 
-#endif

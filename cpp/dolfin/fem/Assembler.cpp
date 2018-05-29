@@ -673,7 +673,7 @@ void Assembler::assemble(Vec b, const Form& L)
   // FIXME: Check that we have a sequential vector
 
   // Get raw array
-  double* values;
+  PetscScalar* values;
   VecGetArray(b, &values);
 
   PetscInt size;

@@ -4,8 +4,6 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#ifndef PETSC_USE_COMPLEX
-
 #include "HDF5Interface.h"
 #include "HDF5File.h"
 #include <boost/filesystem.hpp>
@@ -443,5 +441,3 @@ bool HDF5Interface::get_mpi_atomicity(const hid_t hdf5_file_handle)
   return (bool)atomic;
 }
 //-----------------------------------------------------------------------------
-
-#endif

@@ -5,16 +5,19 @@
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #include <memory>
+// #include <pybind11/complex.h>
 #include <pybind11/eigen.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <petscsys.h>
 #ifdef HAS_PYBIND11_PETSC4PY
 #include <petsc4py/petsc4py.h>
 #endif
 
 #include "casters.h"
+// #include <complex>
 #include <dolfin/common/types.h>
 #include <dolfin/common/IndexMap.h>
 #include <dolfin/la/PETScKrylovSolver.h>
@@ -186,13 +189,14 @@ void la(py::module& m)
       .def("set", py::overload_cast<PetscScalar>(&dolfin::la::PETScVector::set))
       .def("get_local",
            [](const dolfin::la::PETScVector& self) {
-             std::vector<double> values;
-             self.get_local(values);
-             return py::array_t<double>(values.size(), values.data());
+            std::vector<PetscScalar> values;
+            self.get_local(values);
+            return py::array_t<PetscScalar>(values.size(), values.data());
            })
       .def(
           "__setitem__",
-          [](dolfin::la::PETScVector& self, py::slice slice, double value) {
+          [](dolfin::la::PETScVector& self, py::slice slice,
+             PetscScalar value) {
             std::size_t start, stop, step, slicelength;
             if (!slice.compute(self.size(), &start, &stop, &step, &slicelength))
               throw py::error_already_set();
@@ -206,7 +210,7 @@ void la(py::module& m)
       .def(
           "__setitem__",
           [](dolfin::la::PETScVector& self, py::slice slice,
-             const py::array_t<double> x) {
+             const py::array_t<PetscScalar> x) {
             if (x.ndim() != 1)
               throw py::index_error("Values to set must be a 1D array");
 
@@ -216,7 +220,7 @@ void la(py::module& m)
             if (start != 0 or stop != (std::size_t)self.size() or step != 1)
               throw std::range_error("Only full slices are supported");
 
-            std::vector<double> values(x.data(), x.data() + x.size());
+            std::vector<PetscScalar> values(x.data(), x.data() + x.size());
             if (!values.empty())
             {
               self.set_local(values);
@@ -301,7 +305,7 @@ void la(py::module& m)
       .def("get_eigenvalue", &dolfin::la::SLEPcEigenSolver::get_eigenpair)
       .def("get_eigenpair",
            [](dolfin::la::SLEPcEigenSolver& self, std::size_t i) {
-             double lr, lc;
+             PetscScalar lr, lc;
              dolfin::la::PETScVector r, c;
              self.get_eigenpair(lr, lc, r, c, i);
              return py::make_tuple(lr, lc, r, c);

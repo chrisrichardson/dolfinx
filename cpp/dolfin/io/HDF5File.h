@@ -6,7 +6,6 @@
 
 #pragma once
 
-#ifndef PETSC_USE_COMPLEX
 
 #include "HDF5Interface.h"
 #include <dolfin/common/MPI.h>
@@ -282,4 +281,3 @@ void HDF5File::write_data(const std::string dataset_name,
 //---------------------------------------------------------------------------
 }
 }
-#endif

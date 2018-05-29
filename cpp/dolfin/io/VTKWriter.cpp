@@ -26,7 +26,7 @@
 using namespace dolfin;
 using namespace dolfin::io;
 
-#ifndef PETSC_USE_COMPLEX
+
 //----------------------------------------------------------------------------
 void VTKWriter::write_mesh(const mesh::Mesh& mesh, std::size_t cell_dim,
                            std::string filename)
@@ -117,7 +117,9 @@ void VTKWriter::write_cell_data(const function::Function& u,
   // Get  values
   std::vector<double> values(dof_set.size());
   assert(u.vector());
+  #ifndef PETSC_USE_COMPLEX
   u.vector()->get_local(values.data(), dof_set.size(), dof_set.data());
+  #endif
 
   // Get cell data
   fp << ascii_cell_data(mesh, offset, values, data_dim, rank);
@@ -267,5 +269,3 @@ std::uint8_t VTKWriter::vtk_cell_type(const mesh::Mesh& mesh,
   return vtk_cell_type;
 }
 //----------------------------------------------------------------------------
-
-#endif

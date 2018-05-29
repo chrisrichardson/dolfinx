@@ -48,14 +48,14 @@ from .cpp import MPI
 # from .cpp.generation import IntervalMesh, BoxMesh, RectangleMesh
 # from .cpp.io import XDMFFile, VTKFile
 
-if has_slepc():
-    from .cpp.la import SLEPcEigenSolver
+# if has_slepc():
+#     from .cpp.la import SLEPcEigenSolver
 
-from .cpp.mesh import (Mesh, MeshTopology, MeshGeometry, CellType, Cell, Facet,
-                       Face, Edge, Vertex, MeshEntity, Cells, Facets, Faces,
-                       Edges, Vertices, MeshEntities, CellRange, FacetRange,
-                       FaceRange, EdgeRange, VertexRange, EntityRange,
-                       SubDomain, MeshQuality, PeriodicBoundaryComputation)
+# from .cpp.mesh import (Mesh, MeshTopology, MeshGeometry, CellType, Cell, Facet,
+#                        Face, Edge, Vertex, MeshEntity, Cells, Facets, Faces,
+#                        Edges, Vertices, MeshEntities, CellRange, FacetRange,
+#                        FaceRange, EdgeRange, VertexRange, EntityRange,
+#                        SubDomain, MeshQuality, PeriodicBoundaryComputation)
 
 # from .cpp.nls import (NonlinearProblem, NewtonSolver, OptimisationProblem)
 
@@ -84,8 +84,8 @@ from .cpp.mesh import (Mesh, MeshTopology, MeshGeometry, CellType, Cell, Facet,
 # from .jit.pybind11jit import compile_cpp_code
 
 #from .la import la_index_dtype
-from .mesh import MeshFunction
-from .mesh import MeshValueCollection
+# from .mesh import MeshFunction
+# from .mesh import MeshValueCollection
 
 # Import from ufl
 from ufl import (
