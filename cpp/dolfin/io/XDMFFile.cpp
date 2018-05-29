@@ -39,7 +39,6 @@
 using namespace dolfin;
 using namespace dolfin::io;
 
-
 //-----------------------------------------------------------------------------
 XDMFFile::XDMFFile(MPI_Comm comm, const std::string filename)
     : _mpi_comm(comm), _filename(filename), _counter(0),
@@ -450,7 +449,7 @@ void XDMFFile::write(const function::Function& u, double time_step,
     {
       // The XDMFFile was previously closed, and now must be reopened
       _hdf5_file = std::make_unique<HDF5File>(
-              mesh.mpi_comm(), get_hdf5_filename(_filename), "a");
+          mesh.mpi_comm(), get_hdf5_filename(_filename), "a");
     }
     assert(_hdf5_file);
     h5_id = _hdf5_file->h5_id();
@@ -1354,9 +1353,9 @@ void XDMFFile::add_function(MPI_Comm mpi_comm, pugi::xml_node& xml_node,
   // Get all local data
   const la::PETScVector& u_vector = *u.vector();
   std::vector<double> local_data;
-  #ifndef PETSC_USE_COMPLEX
+#ifndef PETSC_USE_COMPLEX
   u_vector.get_local(local_data);
-  #endif
+#endif
 
   add_data_item(mpi_comm, fe_attribute_node, h5_id, h5_path + "/vector",
                 local_data, {(std::int64_t)u_vector.size(), 1}, "Float");
@@ -2684,9 +2683,9 @@ std::vector<double> XDMFFile::get_cell_data_values(const function::Function& u)
   // Get  values
   std::vector<double> data_values(dof_set.size());
   assert(u.vector());
-  #ifndef PETSC_USE_COMPLEX
+#ifndef PETSC_USE_COMPLEX
   u.vector()->get_local(data_values.data(), dof_set.size(), dof_set.data());
-  #endif
+#endif
 
   if (value_rank == 1 && value_size == 2)
   {
@@ -2759,9 +2758,9 @@ std::vector<double> XDMFFile::get_point_data_values(const function::Function& u)
       for (std::size_t j = 0; j < value_size; j++)
       {
         std::size_t tensor_2d_offset = (j > 1 && value_size == 4) ? 1 : 0;
-        #ifndef PETSC_USE_COMPLEX
+#ifndef PETSC_USE_COMPLEX
         _data_values[i * width + j + tensor_2d_offset] = data_values(i, j);
-        #endif
+#endif
       }
     }
   }
@@ -2821,9 +2820,9 @@ std::vector<double> XDMFFile::get_p2_data_values(const function::Function& u)
 
     // Get the values at the vertex points
     const la::PETScVector& uvec = *u.vector();
-    #ifndef PETSC_USE_COMPLEX
+#ifndef PETSC_USE_COMPLEX
     uvec.get_local(data_values.data(), data_dofs.size(), data_dofs.data());
-    #endif
+#endif
 
     // Get midpoint values for  mesh::Edge points
     for (auto& e : mesh::MeshRange<mesh::Edge>(*mesh))
@@ -2862,9 +2861,12 @@ std::vector<double> XDMFFile::get_p2_data_values(const function::Function& u)
     }
 
     const la::PETScVector& uvec = *u.vector();
-    #ifndef PETSC_USE_COMPLEX
+#ifndef PETSC_USE_COMPLEX
     uvec.get_local(data_values.data(), data_dofs.size(), data_dofs.data());
-    #endif
+#else
+    std::vector<PetscScalar> data_values(width * num_local_points);
+    uvec.get_local(data_values.data(), data_dofs.size(), data_dofs.data());
+#endif
   }
   else
   {
