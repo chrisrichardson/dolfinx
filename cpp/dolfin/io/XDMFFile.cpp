@@ -2760,6 +2760,8 @@ std::vector<double> XDMFFile::get_point_data_values(const function::Function& u)
         std::size_t tensor_2d_offset = (j > 1 && value_size == 4) ? 1 : 0;
 #ifndef PETSC_USE_COMPLEX
         _data_values[i * width + j + tensor_2d_offset] = data_values(i, j);
+#else
+        _data_values[i * width + j + tensor_2d_offset] = data_values(i, j).real();
 #endif
       }
     }
@@ -2821,6 +2823,9 @@ std::vector<double> XDMFFile::get_p2_data_values(const function::Function& u)
     // Get the values at the vertex points
     const la::PETScVector& uvec = *u.vector();
 #ifndef PETSC_USE_COMPLEX
+    uvec.get_local(data_values.data(), data_dofs.size(), data_dofs.data());
+#else
+    std::vector<PetscScalar> data_values(width * num_local_points);
     uvec.get_local(data_values.data(), data_dofs.size(), data_dofs.data());
 #endif
 
