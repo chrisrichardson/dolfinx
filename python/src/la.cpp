@@ -6,20 +6,19 @@
 
 #include <memory>
 // #include <pybind11/complex.h>
+#include <petscsys.h>
 #include <pybind11/eigen.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <petscsys.h>
 #ifdef HAS_PYBIND11_PETSC4PY
 #include <petsc4py/petsc4py.h>
 #endif
 
 #include "casters.h"
-// #include <complex>
-#include <dolfin/common/types.h>
 #include <dolfin/common/IndexMap.h>
+#include <dolfin/common/types.h>
 #include <dolfin/la/PETScKrylovSolver.h>
 #include <dolfin/la/PETScMatrix.h>
 #include <dolfin/la/PETScOptions.h>
@@ -189,9 +188,9 @@ void la(py::module& m)
       .def("set", py::overload_cast<PetscScalar>(&dolfin::la::PETScVector::set))
       .def("get_local",
            [](const dolfin::la::PETScVector& self) {
-            std::vector<PetscScalar> values;
-            self.get_local(values);
-            return py::array_t<PetscScalar>(values.size(), values.data());
+             std::vector<PetscScalar> values;
+             self.get_local(values);
+             return py::array_t<PetscScalar>(values.size(), values.data());
            })
       .def(
           "__setitem__",

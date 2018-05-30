@@ -48,8 +48,8 @@ from .cpp import MPI
 # from .cpp.generation import IntervalMesh, BoxMesh, RectangleMesh
 # from .cpp.io import XDMFFile, VTKFile
 
-# if has_slepc():
-#     from .cpp.la import SLEPcEigenSolver
+if has_slepc():
+    from .cpp.la import SLEPcEigenSolver
 
 # from .cpp.mesh import (Mesh, MeshTopology, MeshGeometry, CellType, Cell, Facet,
 #                        Face, Edge, Vertex, MeshEntity, Cells, Facets, Faces,
