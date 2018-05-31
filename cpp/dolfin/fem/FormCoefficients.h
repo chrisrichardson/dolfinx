@@ -8,6 +8,9 @@
 
 #include <memory>
 #include <vector>
+#include <petscsys.h>
+
+using ufc_scalar = PetscScalar;
 
 struct ufc_form;
 

@@ -71,13 +71,13 @@ std::vector<std::size_t> Expression::value_shape() const
   return _value_shape;
 }
 //-----------------------------------------------------------------------------
-void Expression::set_property(std::string name, PetscScalar value)
+void Expression::set_property(std::string name, double value)
 {
   throw std::runtime_error(
       "Expression::set_property should be overloaded in the derived class");
 }
 //-----------------------------------------------------------------------------
-PetscScalar Expression::get_property(std::string name) const
+double Expression::get_property(std::string name) const
 {
   throw std::runtime_error(
       "Expression::get_property should be overloaded in the derived class");

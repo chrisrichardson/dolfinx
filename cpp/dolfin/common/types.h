@@ -8,9 +8,9 @@
 
 #include <Eigen/Dense>
 #include <cstdint>
-#ifdef HAS_PETSC
+// #ifdef HAS_PETSC
 #include <petscsys.h>
-#endif
+// #endif
 
 namespace dolfin
 {
@@ -24,8 +24,8 @@ using la_index_t = PetscInt;
 using la_index_t = std::int32_t;
 #endif
 
-// // Typedef for ufc_scalar
-// using ufc_scalar = PetscScalar;
+// Typedef for ufc_scalar
+using ufc_scalar = PetscScalar;
 
 // Typedefs for Eigen
 

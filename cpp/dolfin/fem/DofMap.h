@@ -17,6 +17,8 @@
 #include <utility>
 #include <vector>
 
+using ufc_scalar = PetscScalar;
+
 struct ufc_dofmap;
 
 namespace dolfin

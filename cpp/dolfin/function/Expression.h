@@ -11,7 +11,7 @@
 #include <petscsys.h>
 #include <vector>
 
-// using ufc_scalar = PetscScalar;
+using ufc_scalar = PetscScalar;
 
 namespace dolfin
 {
@@ -113,12 +113,12 @@ public:
   /// Property setter for type "double"
   /// Used in pybind11 Python interface to attach a value to a python attribute
   ///
-  virtual void set_property(std::string name, PetscScalar value);
+  virtual void set_property(std::string name, double value);
 
   /// Property getter for type "double"
   /// Used in pybind11 Python interface to get the value of a python attribute
   ///
-  virtual PetscScalar get_property(std::string name) const;
+  virtual double get_property(std::string name) const;
 
   /// Property setter for type "GenericFunction"
   /// Used in pybind11 Python interface to attach a value to a python attribute

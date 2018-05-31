@@ -41,6 +41,9 @@
 #include <dolfin/la/SparsityPattern.h>
 #include <dolfin/mesh/Mesh.h>
 #include <dolfin/mesh/SubDomain.h>
+
+using ufc_scalar = PetscScalar;
+
 #include <ufc.h>
 
 namespace py = pybind11;

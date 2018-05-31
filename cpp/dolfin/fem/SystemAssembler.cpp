@@ -4,6 +4,7 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
+#include <dolfin/common/types.h>
 #include "SystemAssembler.h"
 #include "AssemblerBase.h"
 #include "DirichletBC.h"
@@ -15,7 +16,6 @@
 #include <array>
 #include <dolfin/common/ArrayView.h>
 #include <dolfin/common/Timer.h>
-#include <dolfin/common/types.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/function/GenericFunction.h>
 #include <dolfin/la/PETScMatrix.h>
