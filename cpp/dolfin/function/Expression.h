@@ -11,7 +11,7 @@
 #include <petscsys.h>
 #include <vector>
 
-using ufc_scalar = PetscScalar;
+// using ufc_scalar = PetscScalar;
 
 namespace dolfin
 {

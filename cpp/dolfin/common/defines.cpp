@@ -54,6 +54,15 @@ bool dolfin::has_petsc()
 #endif
 }
 //-------------------------------------------------------------------------
+bool dolfin::has_petsc_complex()
+{
+#ifdef PETSC_USE_COMPLEX
+  return true;
+#else
+  return false;
+#endif
+}
+//-------------------------------------------------------------------------
 bool dolfin::has_slepc()
 {
 #ifdef HAS_SLEPC

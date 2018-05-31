@@ -12,7 +12,7 @@
 #include <petscis.h>
 #include <vector>
 
-using ufc_scalar = PetscScalar ;
+// using ufc_scalar = PetscScalar ;
 
 struct ufc_cell_integral;
 struct ufc_exterior_facet_integral;
