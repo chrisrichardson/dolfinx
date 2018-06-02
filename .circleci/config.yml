@@ -48,14 +48,14 @@ jobs:
       #    name: Run C++ regression tests (MPI)
       #    command: cd build && make -j2 demos && ctest -R demo -R mpi
 
-    #   - run:
-    #       name: Build and run C++ demos
-    #       command: |
-    #         cd cpp/demo/documented/poisson
-    #         python3 -m ffc -l dolfin Poisson.ufl
-    #         cmake .
-    #         make
-    #         ./demo_poisson
+      - run:
+          name: Build and run C++ demos
+          command: |
+            cd cpp/demo/documented/poisson
+            python3 -m ffc -l dolfin Poisson.ufl
+            cmake -G Ninja .
+            ninja
+            ./demo_poisson
 
       - run:
           name: Build Python interface
@@ -78,7 +78,7 @@ jobs:
           name: Run Python unit tests (serial)
           command: |
             cd python/test/unit
-            python3 -m pytest -n 3 .
+            python3 -m pytest -v -n 3 .
       - run:
           name: Run Python unit tests (MPI)
           command: |
