@@ -7,11 +7,12 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <complex>
 #include <cstdint>
 #include <petscsys.h>
 
 // Typedef for ufc_scalar
-using ufc_scalar = PetscScalar;
+using ufc_scalar = std::complex<double>;
 
 namespace dolfin
 {

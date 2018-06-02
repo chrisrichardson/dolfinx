@@ -9,10 +9,10 @@ import os
 from dolfin import cpp
 from dolfin import *
 from dolfin_utils.test import skip_if_not_HDF5, fixture, tempdir, \
-    xfail_with_serial_hdf5_in_parallel
+    xfail_with_serial_hdf5_in_parallel, skip_if_complex
 import dolfin.io
 
-
+@skip_if_complex
 @skip_if_not_HDF5
 @xfail_with_serial_hdf5_in_parallel
 def test_save_and_read_function_timeseries(tempdir):

@@ -17,8 +17,6 @@
 #include <string>
 #include <vector>
 
-using ufc_scalar = PetscScalar;
-
 // Forward declaration
 struct ufc_form;
 

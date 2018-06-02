@@ -7,12 +7,11 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <dolfin/common/types.h>
 #include <functional>
 #include <memory>
 #include <petscis.h>
 #include <vector>
-
-using ufc_scalar = PetscScalar ;
 
 struct ufc_cell_integral;
 struct ufc_exterior_facet_integral;

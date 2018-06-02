@@ -8,8 +8,8 @@ import pytest
 import os
 import dolfin
 from dolfin import *
-from dolfin_utils.test import (skip_if_not_HDF5, fixture, tempdir,
-                               xfail_with_serial_hdf5_in_parallel)
+from dolfin_utils.test import (skip_if_not_HDF5, skip_if_complex,
+                               fixture, tempdir, xfail_with_serial_hdf5_in_parallel)
 from dolfin.la import PETScVector
 import dolfin.io as io
 
@@ -21,7 +21,7 @@ def test_parallel(tempdir):
     have_parallel = has_hdf5_parallel()
     hdf5 = HDF5File(MPI.comm_world, filename, "w")
 
-
+@skip_if_complex
 @skip_if_not_HDF5
 @xfail_with_serial_hdf5_in_parallel
 def test_save_vector(tempdir):
@@ -31,7 +31,7 @@ def test_save_vector(tempdir):
     with HDF5File(MPI.comm_world, filename, "w") as vector_file:
         vector_file.write(x, "/my_vector")
 
-
+@skip_if_complex
 @skip_if_not_HDF5
 @xfail_with_serial_hdf5_in_parallel
 def test_save_and_read_vector(tempdir):
@@ -163,7 +163,7 @@ def test_save_and_read_mesh_value_collection_with_only_one_marked_entity(tempdir
         if MPI.rank(mesh.mpi_comm()) == 0:
             assert mvc.get_value(0, 0) == 1
 
-
+@skip_if_complex
 @skip_if_not_HDF5
 @xfail_with_serial_hdf5_in_parallel
 def test_save_and_read_function(tempdir):

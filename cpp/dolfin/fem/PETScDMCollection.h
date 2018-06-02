@@ -13,8 +13,6 @@
 #include <petscvec.h>
 #include <vector>
 
-using ufc_scalar = PetscScalar ;
-
 namespace dolfin
 {
 
@@ -100,5 +98,5 @@ private:
   // The PETSc DM objects
   std::vector<DM> _dms;
 };
-}
-}
+} // namespace fem
+} // namespace dolfin

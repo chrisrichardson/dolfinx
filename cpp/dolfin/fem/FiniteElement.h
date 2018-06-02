@@ -9,11 +9,9 @@
 #include <dolfin/common/types.h>
 #include <memory>
 #include <petscsys.h>
+#include <ufc.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
-
-using ufc_scalar = PetscScalar;
-#include <ufc.h>
 
 namespace dolfin
 {

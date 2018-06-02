@@ -32,6 +32,10 @@ skip_with_serial_hdf5_in_parallel = pytest.mark.skipif(MPI.size(MPI.comm_world) 
 skip_in_serial = pytest.mark.skipif(MPI.size(MPI.comm_world) <= 1,
                                     reason="This test should only be run in parallel.")
 
+# Skips with respect to the scalar type
+skip_if_complex = pytest.mark.skipif(has_petsc_complex(),
+                                   reason="This test does not work in debug mode.")
+
 # Skips with respect to linear algebra index type
 # skip_64bit_int = pytest.mark.skipif(cpp.common.sizeof_la_index() == 8,
 #                                     reason="This test does not work with 64-bit linear algebra indices.")

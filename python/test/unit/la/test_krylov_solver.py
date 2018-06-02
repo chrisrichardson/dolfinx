@@ -9,9 +9,9 @@
 import pytest
 from dolfin import *
 from dolfin.la import PETScKrylovSolver, PETScVector, PETScMatrix, PETScOptions
-from dolfin_utils.test import skip_in_parallel
+from dolfin_utils.test import skip_in_parallel, skip_if_complex
 
-
+@skip_if_complex
 def test_krylov_solver_lu():
 
     mesh = UnitSquareMesh(MPI.comm_world, 12, 12)
