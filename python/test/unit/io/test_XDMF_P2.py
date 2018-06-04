@@ -24,6 +24,7 @@ def test_read_write_p2_mesh(tempdir):
     assert mesh2.num_entities_global(mesh.topology.dim) == mesh.num_entities_global(mesh.topology.dim)
     assert mesh2.num_entities_global(0) == mesh.num_entities_global(0)
 
+@skip_if_complex
 def test_read_write_p2_function(tempdir):
     mesh = dolfin.cpp.generation.UnitDiscMesh.create(MPI.comm_world, 3,
                                                      dolfin.cpp.mesh.GhostMode.none)
