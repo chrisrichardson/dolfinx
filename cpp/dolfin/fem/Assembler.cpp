@@ -259,7 +259,8 @@ void Assembler::assemble(la::PETScVector& b, BlockType block_type)
       }
 
       // Assemble
-      EigenVectorXd b_vec(map_size0 + map_size1);
+      Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> b_vec(map_size0
+                                                          + map_size1);
       b_vec.setZero();
       this->assemble(b_vec, *_l[i]);
 
@@ -367,7 +368,7 @@ void Assembler::ident(la::PETScMatrix& A, const function::FunctionSpace& V,
 
   auto map = V.dofmap()->index_map();
   int local_size = map->block_size() * map->size_local();
-  double one = 1.0;
+  PetscScalar one = 1.0;
   for (auto bc : boundary_values)
   {
     la_index_t row = bc.first;

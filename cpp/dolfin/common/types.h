@@ -12,7 +12,7 @@
 #include <petscsys.h>
 
 // Typedef for ufc_scalar
-using ufc_scalar = std::complex<double>;
+using ufc_scalar_t = std::complex<double>;
 
 namespace dolfin
 {
