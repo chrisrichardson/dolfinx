@@ -7,7 +7,7 @@
 import pytest
 import os
 from dolfin import *
-from dolfin_utils.test import tempdir
+from dolfin_utils.test import tempdir, skip_if_complex
 import dolfin
 
 def test_read_write_p2_mesh(tempdir):
