@@ -242,7 +242,7 @@ class Function(ufl.Coefficient):
 
         # Set name as given or automatic
         name = kwargs.get("name") or "f_%d" % self.count()
-        self.rename(name, "a Function")
+        self.rename(name)
 
     def function_space(self):
         "Return the FunctionSpace"
@@ -295,10 +295,6 @@ class Function(ufl.Coefficient):
 
         return values
 
-    # def _assign(self, u):
-    #    if isinstance(u, cpp.function.FunctionAXPY):
-    #        self._cpp_object._assign(u)
-
     def eval_cell(self, u, x, cell):
         return self._cpp_object.eval(u, x, cell)
 
@@ -350,8 +346,7 @@ class Function(ufl.Coefficient):
                 FunctionSpaces.
         """
 
-        if isinstance(rhs, (cpp.function.Function, cpp.function.Expression,
-                            cpp.function.FunctionAXPY)):
+        if isinstance(rhs, (cpp.function.Function, cpp.function.Expression)):
             # Avoid self assignment
             if self == rhs:
                 return
@@ -418,8 +413,8 @@ class Function(ufl.Coefficient):
     def name(self):
         return self._cpp_object.name()
 
-    def rename(self, name, s):
-        self._cpp_object.rename(name, s)
+    def rename(self, name):
+        self._cpp_object.rename(name)
 
     def id(self):
         return self._cpp_object.id()

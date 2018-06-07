@@ -25,7 +25,6 @@
 #include <dolfin/mesh/Mesh.h>
 #include <dolfin/mesh/MeshFunction.h>
 #include <dolfin/mesh/MeshIterator.h>
-#include <dolfin/mesh/MeshValueCollection.h>
 #include <dolfin/mesh/SubDomain.h>
 #include <dolfin/mesh/Vertex.h>
 #include <map>
@@ -80,6 +79,7 @@ void DirichletBC::gather(Map& boundary_values) const
   const GenericDofMap& dofmap = *_function_space->dofmap();
   const auto& shared_nodes = dofmap.shared_nodes();
   const int bs = dofmap.block_size();
+  assert(dofmap.index_map());
 
   // Create list of boundary values to send to each processor
   std::vector<std::vector<std::size_t>> proc_map0(comm_size);
@@ -87,10 +87,11 @@ void DirichletBC::gather(Map& boundary_values) const
   for (Map::const_iterator bv = boundary_values.begin();
        bv != boundary_values.end(); ++bv)
   {
-    // If the boundary value is attached to a shared dof, add it to
-    // the list of boundary values for each of the processors that
-    // share it
-    const int node_index = bv->first / bs;
+    // If the boundary value is attached to a shared dof, add it to the
+    // list of boundary values for each of the processors that share it
+    const std::div_t div = std::div(bv->first, bs);
+    const int component = div.rem;
+    const int node_index = div.quot;
 
     auto shared_node = shared_nodes.find(node_index);
     if (shared_node != shared_nodes.end())
@@ -98,8 +99,9 @@ void DirichletBC::gather(Map& boundary_values) const
       for (auto proc = shared_node->second.begin();
            proc != shared_node->second.end(); ++proc)
       {
-        proc_map0[*proc].push_back(
-            dofmap.index_map()->local_to_global_index(bv->first));
+        const std::size_t global_node
+            = dofmap.index_map()->local_to_global(node_index);
+        proc_map0[*proc].push_back(bs*global_node + component);
         proc_map1[*proc].push_back(bv->second);
       }
     }
@@ -139,20 +141,21 @@ void DirichletBC::gather(Map& boundary_values) const
       const std::size_t node = div.quot;
       const int component = div.rem;
 
-      // Get local-to-global for unowned blocks
-      const std::vector<std::size_t>& local_to_global
-          = dofmap.index_map()->local_to_global_unowned();
+      // Get local-to-global for ghost blocks
+      const auto& local_to_global = dofmap.index_map()->ghosts();
 
       // Case 1: dof is not owned by this process
-      auto it = std::find(local_to_global.begin(), local_to_global.end(), node);
-      if (it == local_to_global.end())
+      auto it
+          = std::find(local_to_global.data(),
+                      local_to_global.data() + local_to_global.size(), node);
+      if (it == (local_to_global.data() + local_to_global.size()))
       {
         throw std::runtime_error(
             "Cannot find dof in local_to_global_unowned array");
       }
       else
       {
-        std::size_t pos = std::distance(local_to_global.begin(), it);
+        std::size_t pos = std::distance(local_to_global.data(), it);
         _vec[i].first = owned_size + bs * pos + component;
       }
     }

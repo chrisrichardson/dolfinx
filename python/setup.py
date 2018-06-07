@@ -18,7 +18,6 @@ RESTRICT_REQUIREMENTS = ">=2018.1.0.dev0,<2018.2"
 
 REQUIREMENTS = [
     "numpy",
-    "pkgconfig",
     "fenics-ffc{}".format(RESTRICT_REQUIREMENTS),
     "fenics-ufl{}".format(RESTRICT_REQUIREMENTS),
     "fenics-dijitso{}".format(RESTRICT_REQUIREMENTS),
@@ -62,9 +61,9 @@ class CMakeBuild(build_ext):
         else:
             cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
             if "CI" in os.environ:
-                build_args += ['--', '-j2']
+                build_args += ['--', '-j3']
             elif "CIRCLECI" in os.environ:
-                build_args += ['--', '-j2']
+                build_args += ['--', '-j3']
             else:
                 num_build_threads = max(1, multiprocessing.cpu_count() - 1)
                 build_args += ['--', '-j' + str(num_build_threads)]

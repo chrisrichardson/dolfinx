@@ -47,9 +47,6 @@ public:
 
     //-- Meshes
 
-    // Mesh ghosting type
-    p.add("ghost_mode", "none", {"shared_facet", "shared_vertex", "none"});
-
     // Mesh ordering via SCOTCH and GPS
     p.add("reorder_cells_gps", false);
     p.add("reorder_vertices_gps", false);
@@ -68,12 +65,6 @@ public:
     // but applies to ParMETIS
     p.add("partitioning_approach", "PARTITION",
           {"PARTITION", "REPARTITION", "REFINE"});
-
-    //-- Linear algebra
-
-#ifdef HAS_PETSC
-    p.add("use_petsc_signal_handler", false);
-#endif
 
     return p;
   }

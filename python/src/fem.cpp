@@ -133,7 +133,6 @@ void fem(py::module& m)
            "The dimension of the global finite element function space")
       .def("index_map", &dolfin::fem::GenericDofMap::index_map)
       .def("neighbours", &dolfin::fem::GenericDofMap::neighbours)
-      .def("off_process_owner", &dolfin::fem::GenericDofMap::off_process_owner)
       .def("shared_nodes", &dolfin::fem::GenericDofMap::shared_nodes)
       .def("cell_dofs", &dolfin::fem::GenericDofMap::cell_dofs)
       .def("dofs", (std::vector<dolfin::la_index_t>(
@@ -199,13 +198,16 @@ void fem(py::module& m)
           py::arg("mpi_comm"), py::arg("mesh"), py::arg("dofmaps"),
           py::arg("cells"), py::arg("interior_facets"),
           py::arg("exterior_facets"), py::arg("vertices"), py::arg("diagonal"),
-          py::arg("finalize") = true, "Create SparsityPattern from pair of dofmaps");
+          py::arg("finalize") = true,
+          "Create SparsityPattern from pair of dofmaps");
 
   // dolfin::fem::DirichletBC
   py::class_<dolfin::fem::DirichletBC,
              std::shared_ptr<dolfin::fem::DirichletBC>,
              dolfin::common::Variable>
-      dirichletbc(m, "DirichletBC", "Object for representing Dirichlet (essential) boundary conditions");
+      dirichletbc(
+          m, "DirichletBC",
+          "Object for representing Dirichlet (essential) boundary conditions");
 
   // dolfin::fem::DirichletBC  enum
   py::enum_<dolfin::fem::DirichletBC::Method>(dirichletbc, "Method")
@@ -248,10 +250,18 @@ void fem(py::module& m)
       });
 
   // dolfin::fem::Assembler
-  py::class_<dolfin::fem::Assembler, std::shared_ptr<dolfin::fem::Assembler>>(
-      m, "Assembler",
-      "Assembler object for assembling forms into matrices and "
-      "vectors")
+  py::class_<dolfin::fem::Assembler, std::shared_ptr<dolfin::fem::Assembler>>
+      assembler(
+          m, "Assembler",
+          "Assembler object for assembling forms into matrices and vectors");
+
+  // dolfin::fem::Assembler::BlockType enum
+  py::enum_<dolfin::fem::Assembler::BlockType>(assembler, "BlockType")
+      .value("nested", dolfin::fem::Assembler::BlockType::nested)
+      .value("monolithic", dolfin::fem::Assembler::BlockType::monolithic);
+
+  // dolfin::fem::Assembler
+  assembler
       .def(py::init<
            std::vector<std::vector<std::shared_ptr<const dolfin::fem::Form>>>,
            std::vector<std::shared_ptr<const dolfin::fem::Form>>,
@@ -259,7 +269,13 @@ void fem(py::module& m)
       .def(
           "assemble",
           py::overload_cast<dolfin::la::PETScMatrix&, dolfin::la::PETScVector&>(
-              &dolfin::fem::Assembler::assemble));
+              &dolfin::fem::Assembler::assemble))
+      .def("assemble", py::overload_cast<dolfin::la::PETScMatrix&,
+                                         dolfin::fem::Assembler::BlockType>(
+                           &dolfin::fem::Assembler::assemble))
+      .def("assemble", py::overload_cast<dolfin::la::PETScVector&,
+                                         dolfin::fem::Assembler::BlockType>(
+                           &dolfin::fem::Assembler::assemble));
 
   // dolfin::fem::AssemblerBase
   py::class_<dolfin::fem::AssemblerBase,
@@ -317,6 +333,8 @@ void fem(py::module& m)
       .def(py::init<std::shared_ptr<const ufc_form>,
                     std::vector<std::shared_ptr<
                         const dolfin::function::FunctionSpace>>>())
+      .def(py::init<std::vector<
+               std::shared_ptr<const dolfin::function::FunctionSpace>>>())
       .def("num_coefficients",
            [](const dolfin::fem::Form& self) { return self.coeffs().size(); },
            "Return number of coefficients in form")
@@ -334,6 +352,12 @@ void fem(py::module& m)
       .def("set_interior_facet_domains",
            &dolfin::fem::Form::set_interior_facet_domains)
       .def("set_vertex_domains", &dolfin::fem::Form::set_vertex_domains)
+      .def("set_cell_tabulate",
+           [](dolfin::fem::Form& self, unsigned int i, std::size_t addr) {
+             auto tabulate_tensor_ptr = (void (*)(double*, const double* const*,
+                                                  const double*, int))addr;
+             self.integrals().set_cell_tabulate_tensor(i, tabulate_tensor_ptr);
+           })
       .def("rank", &dolfin::fem::Form::rank)
       .def("mesh", &dolfin::fem::Form::mesh)
       .def("coordinate_mapping", &dolfin::fem::Form::coordinate_mapping);
@@ -398,49 +422,5 @@ void fem(py::module& m)
       .def("check_ref_count", &dolfin::fem::PETScDMCollection::check_ref_count)
       .def("get_dm", &dolfin::fem::PETScDMCollection::get_dm);
 #endif
-
-  // FEM utils free functions
-  // m.def("create_mesh", dolfin::fem::create_mesh);
-  // m.def("create_mesh", [](const py::object u) {
-  //  auto _u =
-  //  u.attr("_cpp_object").cast<dolfin::function::Function*>();
-  //  return dolfin::fem::create_mesh(*_u);
-  //});
-
-  // m.def("set_coordinates", &dolfin::fem::set_coordinates);
-  // m.def("set_coordinates", [](dolfin::mesh::MeshGeometry
-  // &geometry,
-  //                             const py::object u) {
-  //   auto _u = u.attr("_cpp_object").cast<const
-  //   dolfin::function::Function
-  //   *>(); dolfin::fem::set_coordinates(geometry, *_u);
-  // });
-
-  // m.def("get_coordinates", &dolfin::fem::get_coordinates);
-  // m.def("get_coordinates",
-  //       [](py::object u, const dolfin::mesh::MeshGeometry
-  //       &geometry) {
-  //         auto _u =
-  //         u.attr("_cpp_object").cast<dolfin::function::Function
-  //         *>(); return dolfin::fem::get_coordinates(*_u,
-  //         geometry);
-  //       });
-
-  m.def("vertex_to_dof_map", [](const dolfin::function::FunctionSpace& V) {
-    const auto _v2d = dolfin::fem::vertex_to_dof_map(V);
-    return py::array_t<dolfin::la_index_t>(_v2d.size(), _v2d.data());
-  });
-
-  m.def("vertex_to_dof_map", [](py::object V) {
-    auto _V = V.attr("_cpp_object").cast<dolfin::function::FunctionSpace*>();
-    const auto _v2d = dolfin::fem::vertex_to_dof_map(*_V);
-    return py::array_t<dolfin::la_index_t>(_v2d.size(), _v2d.data());
-  });
-  m.def("dof_to_vertex_map", &dolfin::fem::dof_to_vertex_map);
-  m.def("dof_to_vertex_map", [](py::object V) {
-    auto _V = V.attr("_cpp_object").cast<dolfin::function::FunctionSpace*>();
-    const auto _d2v = dolfin::fem::dof_to_vertex_map(*_V);
-    return py::array_t<std::size_t>(_d2v.size(), _d2v.data());
-  });
 }
 } // namespace dolfin_wrappers
