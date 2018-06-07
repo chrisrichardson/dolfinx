@@ -136,13 +136,6 @@ DofMapBuilder::build(const ufc_dofmap& ufc_map, const mesh::Mesh& mesh)
                                node_local_to_global0, mesh,
                                global_dimension / bs);
 
-  auto index_map = std::make_unique<common::IndexMap>(mesh.mpi_comm(),
-                                                      num_owned_nodes, bs);
-  assert(index_map);
-  assert(MPI::sum(mesh.mpi_comm(),
-                  bs * index_map->size(common::IndexMap::MapSize::OWNED))
-         == global_dimension);
-
   // Compute node re-ordering for process index locality, and spatial
   // locality within a process, including
   // (a) Old-to-new node indices (local)
@@ -155,7 +148,12 @@ DofMapBuilder::build(const ufc_dofmap& ufc_map, const mesh::Mesh& mesh)
       = compute_node_reordering(
           shared_node_to_processes0, node_local_to_global0, node_graph0,
           node_ownership0, global_nodes0, mesh.mpi_comm());
-  index_map->set_block_local_to_global(local_to_global_unowned);
+
+  auto index_map = std::make_unique<common::IndexMap>(
+      mesh.mpi_comm(), num_owned_nodes, local_to_global_unowned, bs);
+  assert(index_map);
+  assert(MPI::sum(mesh.mpi_comm(), bs * index_map->size_local())
+         == global_dimension);
 
   // Update shared_nodes for node reordering
   std::unordered_map<int, std::vector<int>> shared_nodes_foo;
@@ -593,8 +591,8 @@ DofMapBuilder::extract_global_dofs(
           = global_dofs.insert(dof_local + offset_local);
       if (!ret.second)
       {
-        std::runtime_error("Computing global degrees of freedom - global "
-                           "degree of freedom already exists");
+        throw std::runtime_error("Computing global degrees of freedom - global "
+                                 "degree of freedom already exists");
       }
     }
   }
@@ -692,6 +690,7 @@ DofMapBuilder::extract_ufc_sub_dofmap(
 std::size_t DofMapBuilder::compute_blocksize(const ufc_dofmap& ufc_dofmap,
                                              std::size_t tdim)
 {
+  //return 1;
   bool has_block_structure = false;
   if (ufc_dofmap.num_sub_dofmaps > 1)
   {
@@ -1028,11 +1027,12 @@ DofMapBuilder::compute_node_reordering(
   std::vector<int> node_remap;
   if (ordering_library == "Boost")
   {
-    node_remap
-        = dolfin::graph::BoostGraphOrdering::compute_cuthill_mckee(graph, true);
+    node_remap = graph::BoostGraphOrdering::compute_cuthill_mckee(graph, true);
   }
   else if (ordering_library == "SCOTCH")
-    node_remap = dolfin::graph::SCOTCH::compute_gps(graph);
+  {
+    std::tie(node_remap, std::ignore) = graph::SCOTCH::compute_gps(graph);
+  }
   else if (ordering_library == "random")
   {
     // NOTE: Randomised dof ordering should only be used for

@@ -56,9 +56,10 @@ void io(py::module& m)
       // read
       .def("read_mesh",
            [](dolfin::io::HDF5File& self, const MPICommWrapper comm,
-              const std::string data_path, bool use_partition_from_file) {
+              const std::string data_path, bool use_partition_from_file,
+              const dolfin::mesh::GhostMode ghost_mode) {
              return self.read_mesh(comm.get(), data_path,
-                                   use_partition_from_file);
+                                   use_partition_from_file, ghost_mode);
            })
       .def("read_vector",
            [](dolfin::io::HDF5File& self, const MPICommWrapper comm,
@@ -217,6 +218,7 @@ void io(py::module& m)
            }),
            py::arg("comm"), py::arg("filename"))
       .def(py::init<std::string>())
+      .def("close", &dolfin::io::XDMFFile::close)
       .def("__enter__", [](dolfin::io::XDMFFile& self) { return &self; })
       .def("__exit__", [](dolfin::io::XDMFFile& self, py::args args,
                           py::kwargs kwargs) { self.close(); });
@@ -369,8 +371,9 @@ void io(py::module& m)
   xdmf_file
       // Mesh
       .def("read_mesh",
-           [](dolfin::io::XDMFFile& self, const MPICommWrapper comm) {
-             return self.read_mesh(comm.get());
+           [](dolfin::io::XDMFFile& self, const MPICommWrapper comm,
+              const dolfin::mesh::GhostMode ghost_mode) {
+             return self.read_mesh(comm.get(), ghost_mode);
            })
       // MeshFunction
       .def("read_mf_bool", &dolfin::io::XDMFFile::read_mf_bool, py::arg("mesh"),

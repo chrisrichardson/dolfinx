@@ -34,6 +34,7 @@ class Function;
 
 namespace mesh
 {
+enum class GhostMode : int;
 class MeshEntity;
 
 /// A _Mesh_ consists of a set of connected and numbered mesh entities.
@@ -93,10 +94,13 @@ public:
   /// @param num_ghost_cells
   ///         Number of ghost cells on this process (must be at end of list of
   ///         cells)
+  // FIXME: What about global vertex indices?
+  // FIXME: Be explicit in passing geometry degree/type
   Mesh(MPI_Comm comm, mesh::CellType::Type type,
-       const Eigen::Ref<const EigenRowArrayXXd>& points,
-       const Eigen::Ref<const EigenRowArrayXXi64>& cells,
+       const Eigen::Ref<const EigenRowArrayXXd> points,
+       const Eigen::Ref<const EigenRowArrayXXi64> cells,
        const std::vector<std::int64_t>& global_cell_indices,
+       const GhostMode ghost_mode,
        std::uint32_t num_ghost_cells = 0);
 
   /// Copy constructor.
@@ -317,15 +321,12 @@ public:
   /// WARNING: the interface may change in future without
   /// deprecation; the method is now intended for internal
   /// library use.
-  std::string get_ghost_mode() const;
-
-  // FIXME: Remove - should be set at construction
-  /// Set ghost mode
-  void set_ghost_mode(std::string mode);
+  mesh::GhostMode get_ghost_mode() const;
 
   /// Get coordinate dofs for all local cells
   const CoordinateDofs& coordinate_dofs() const { return _coordinate_dofs; }
 
+  // FIXME: This should be with MeshGeometry
   std::uint32_t degree() const { return _degree; }
 
 private:
@@ -338,9 +339,11 @@ private:
   // Mesh geometry
   MeshGeometry _geometry;
 
+  // FIXME: This should be in geometry!
   // Coordinate dofs
   CoordinateDofs _coordinate_dofs;
 
+  // FXIME: This shouldn't be here
   // Mesh geometric degree (in Lagrange basis) describing coordinate dofs
   std::uint32_t _degree;
 
@@ -353,7 +356,7 @@ private:
   dolfin::MPI::Comm _mpi_comm;
 
   // Ghost mode used for partitioning
-  std::string _ghost_mode;
+  GhostMode _ghost_mode;
 };
 } // namespace mesh
 } // namespace dolfin

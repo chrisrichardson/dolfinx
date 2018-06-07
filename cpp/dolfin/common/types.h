@@ -6,17 +6,17 @@
 
 #pragma once
 
-#include <cstdint>
-#ifdef HAS_PETSC
-#include <petscsys.h>
-#endif
-
 #include <Eigen/Dense>
+#include <cstdint>
+#include <petscsys.h>
 
 namespace dolfin
 {
 
-// Some typedefs for Eigen
+// Index type for compatibility with linear algebra backend
+using la_index_t = PetscInt;
+
+// Typedefs for Eigen
 
 // bool Arrays
 using EigenArrayXb = Eigen::Array<bool, Eigen::Dynamic, 1>;
@@ -41,17 +41,13 @@ using EigenRowArrayXi64 = Eigen::Array<std::int64_t, 1, Eigen::Dynamic>;
 using EigenRowArrayXXi64 = Eigen::Array<std::int64_t, Eigen::Dynamic,
                                         Eigen::Dynamic, Eigen::RowMajor>;
 
+// la_index_t Arrays
+using EigenArrayXlaindex = Eigen::Array<dolfin::la_index_t, Eigen::Dynamic, 1>;
+
 // double Matrices
 using EigenRowMatrixXd
     = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
 // double Vectors
 using EigenVectorXd = Eigen::Matrix<double, Eigen::Dynamic, 1>;
-
-/// Index type for compatibility with linear algebra backend(s)
-#ifdef HAS_PETSC
-typedef PetscInt la_index_t;
-#else
-typedef std::int32_t la_index_t;
-#endif
-}
+} // namespace dolfin

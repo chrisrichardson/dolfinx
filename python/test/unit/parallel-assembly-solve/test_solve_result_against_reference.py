@@ -12,7 +12,7 @@ parallel assembly/solve."""
 import pytest
 import sys
 from dolfin import *
-from dolfin.la import PETScOptions
+from dolfin.la import PETScOptions, PETScKrylovSolver
 from dolfin_utils.test import *
 
 # Relative tolerance for regression test
@@ -34,10 +34,19 @@ def compute_norm(mesh, degree):
 
     # Compute solution
     w = Function(V)
-    solve(a == L, w)
+    solve(a == L, w, petsc_options={"ksp_type": "preonly",
+                                    "pc_type": "lu"})
+    #
+    # A, b = fem.assembling.assemble_system(a, L)
+    # solver = PETScKrylovSolver(MPI.comm_world)
+    # PETScOptions.set("ksp_type", "preonly")
+    # PETScOptions.set("pc_type", "lu")
+    # solver.set_from_options()
+    # solver.set_operator(A)
+    # solver.solve(w.vector(), b)
 
     # Return norm of solution vector
-    return w.vector().norm("l2")
+    return w.vector().norm(cpp.la.Norm.l2)
 
 def print_reference(results):
     "Print nicely formatted values for gluing into code as a reference"
@@ -109,8 +118,7 @@ def test_computed_norms_against_references():
 
     # For MUMPS, increase estimated require memory increase. Typically
     # required for high order elements on small meshes in 3D
-    if has_petsc():
-        PETScOptions.set("mat_mumps_icntl_14", 40)
+    PETScOptions.set("mat_mumps_icntl_14", 40)
 
     # Iterate over test cases and collect results
     results = []
@@ -121,8 +129,7 @@ def test_computed_norms_against_references():
             results.append((mesh[1], degree, norm))
 
     # Change option back to default
-    if has_petsc():
-        PETScOptions.set("mat_mumps_icntl_14", 20)
+    PETScOptions.set("mat_mumps_icntl_14", 20)
 
     # Check results
     errors = check_results(results, reference, tol)

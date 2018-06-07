@@ -54,7 +54,8 @@ def compile_cpp_code(cpp_code):
     params['cache']['lib_loader'] = "import"
 
     # Include path and library info from DOLFIN (dolfin.pc)
-    params['build']['include_dirs'] = dolfin_pc["include_dirs"] + get_pybind_include() + [sysconfig.get_config_var("INCLUDEDIR") + "/" + pyversion]
+    params['build']['include_dirs'] = dolfin_pc["include_dirs"] + get_pybind_include() \
+        + [sysconfig.get_config_var("INCLUDEDIR") + "/" + pyversion]
     params['build']['libs'] = dolfin_pc["libraries"] + [pyversion]
     params['build']['lib_dirs'] = dolfin_pc["library_dirs"] + [sysconfig.get_config_var("LIBDIR")]
 
@@ -64,13 +65,6 @@ def compile_cpp_code(cpp_code):
     dmacros = ['-D' + dm for dm in dolfin_pc['define_macros']]
 
     params['build']['cxxflags'] += tuple(dmacros)
-
-    # This seems to be needed by OSX but not in Linux
-    # FIXME: probably needed for other libraries too
-    # if cpp.common.has_petsc():
-    #     import os
-    #     params['build']['libs'] += ['petsc']
-    #     params['build']['lib_dirs'] += [os.environ["PETSC_DIR"] + "/lib"]
 
     module_hash = hashlib.md5(cpp_code.encode('utf-8')).hexdigest()
     module_name = "dolfin_cpp_module_" + module_hash
