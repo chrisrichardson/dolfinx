@@ -53,7 +53,8 @@ def build_nullspace(V, x):
 
 # mesh = UnitCubeMesh(2, 2, 2)
 mesh = BoxMesh.create(MPI.comm_world, [Point(0, 0, 0), Point(2, 1, 1)], [
-                      12, 12, 12], CellType.Type.tetrahedron)
+                      12, 12, 12], CellType.Type.tetrahedron,
+                      dolfin.cpp.mesh.GhostMode.none)
 cmap = dolfin.fem.create_coordinate_map(mesh.ufl_domain())
 mesh.geometry.coord_mapping = cmap
 
@@ -117,9 +118,9 @@ null_space = build_nullspace(V, u.vector())
 
 # Attach near nullspace to matrix
 A.set_near_nullspace(null_space)
-# as_backend_type(A).set_near_nullspace(null_space)
 
 # Set solver options
+PETScOptions.set("ksp_view")
 PETScOptions.set("ksp_type", "cg")
 PETScOptions.set("ksp_rtol", 1.0e-12)
 PETScOptions.set("pc_type", "gamg")
@@ -148,9 +149,9 @@ solver.solve(u.vector(), b)
 
 # Save solution to XDMF format
 file = XDMFFile(MPI.comm_world, "elasticity.xdmf")
-file.write(u, XDMFFile.Encoding.ASCII)
+file.write(u)
 
-unorm = u.vector().norm("l2")
+unorm = u.vector().norm(dolfin.cpp.la.Norm.l2)
 if MPI.rank(mesh.mpi_comm()) == 0:
     print("Solution vector norm:", unorm)
 

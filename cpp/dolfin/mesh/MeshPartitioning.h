@@ -7,7 +7,6 @@
 #pragma once
 
 #include "DistributedMeshTools.h"
-#include "LocalMeshValueCollection.h"
 #include "Mesh.h"
 #include "PartitionData.h"
 #include <cstdint>
@@ -34,6 +33,14 @@ class MeshFunction;
 template <typename T>
 class MeshValueCollection;
 class CellType;
+
+/// Enum for different partitioning ghost modes
+enum class GhostMode : int
+{
+  none,
+  shared_facet,
+  shared_vertex
+};
 
 /// This class partitions and distributes a mesh based on
 /// partitioned local mesh data.The local mesh data will also be
@@ -66,7 +73,7 @@ public:
                          const Eigen::Ref<const EigenRowArrayXXd>& points,
                          const Eigen::Ref<const EigenRowArrayXXi64>& cells,
                          const std::vector<std::int64_t>& global_cell_indices,
-                         const std::string ghost_mode);
+                         const mesh::GhostMode ghost_mode);
 
   /// Redistribute points to the processes that need them.
   /// @param mpi_comm
@@ -100,10 +107,9 @@ public:
   ///   topology in local indexing (EigenRowArrayXXi32)
   static std::tuple<std::uint64_t, std::vector<std::int64_t>,
                     EigenRowArrayXXi32>
-  compute_point_mapping(
-      std::uint32_t num_cell_vertices,
-      const Eigen::Ref<const EigenRowArrayXXi64>& cell_points,
-      const std::vector<std::uint8_t>& cell_permutation);
+  compute_point_mapping(std::uint32_t num_cell_vertices,
+                        const Eigen::Ref<const EigenRowArrayXXi64>& cell_points,
+                        const std::vector<std::uint8_t>& cell_permutation);
 
   // Utility to create global vertex indices, needed for higher
   // order meshes, where there are geometric points which are not
@@ -130,22 +136,20 @@ private:
                           const Eigen::Ref<const EigenRowArrayXXi64>& cells,
                           const Eigen::Ref<const EigenRowArrayXXd>& points,
                           const std::vector<std::int64_t>& global_cell_indices,
-                          const std::string ghost_mode,
+                          const mesh::GhostMode ghost_mode,
                           const PartitionData& mp);
 
-  // FIXME: The code for this function is really bad. For example, it seems that
-  // cell_vertices carries data in which is used, and is then also modified
-  // (bad!)
-  // FIXME: Improve this docstring
-  // Distribute a layer of cells attached by vertex to boundary updating
-  // new_mesh_data and shared_cells. Used when ghosting by vertex.
-  //   static void distribute_cell_layer(
-  //       MPI_Comm mpi_comm, const int num_regular_cells,
-  //       const std::int64_t num_global_vertices,
-  //       std::map<std::int32_t, std::set<std::uint32_t>>& shared_cells,
-  //       EigenRowArrayXXi64& cell_vertices,
-  //       std::vector<std::int64_t>& global_cell_indices,
-  //       std::vector<int>& cell_partition);
+  // Distribute additional cells implied by connectivity via vertex. The input
+  // cell_vertices, shared_cells, global_cell_indices and cell_partition must
+  // already be distributed with a ghost layer by shared_facet.
+  // FIXME: shared_cells, cell_vertices, global_cell_indices and cell_partition
+  // are all modified by this function.
+  static void distribute_cell_layer(
+      MPI_Comm mpi_comm, const int num_regular_cells,
+      std::map<std::int32_t, std::set<std::uint32_t>>& shared_cells,
+      EigenRowArrayXXi64& cell_vertices,
+      std::vector<std::int64_t>& global_cell_indices,
+      std::vector<int>& cell_partition);
 
   // FIXME: make clearer what goes in and what comes out
   // Reorder cells by Gibbs-Poole-Stockmeyer algorithm (via SCOTCH). Returns

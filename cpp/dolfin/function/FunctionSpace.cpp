@@ -163,14 +163,12 @@ void FunctionSpace::interpolate(la::PETScVector& expansion_coefficients,
   // Initialize vector of expansion coefficients
   if (expansion_coefficients.size() != _dofmap->global_dimension())
   {
-    log::dolfin_error("FunctionSpace.cpp",
-                      "interpolate function into function space",
-                      "Wrong size of vector");
+    throw std::runtime_error("Cannot interpolate function into function space. "
+                             "Wrong size of vector");
   }
-  expansion_coefficients.zero();
+  expansion_coefficients.set(0.0);
 
   std::shared_ptr<const FunctionSpace> v_fs = v.function_space();
-
   interpolate_from_any(expansion_coefficients, v);
 
   // Finalise changes
@@ -259,8 +257,7 @@ EigenRowArrayXXd FunctionSpace::tabulate_dof_coordinates() const
   // Get local size
   assert(_dofmap);
   std::size_t bs = _dofmap->block_size();
-  std::size_t local_size
-      = bs * _dofmap->index_map()->size(common::IndexMap::MapSize::OWNED);
+  std::size_t local_size = bs * _dofmap->index_map()->size_local();
 
   // Dof coordinate on reference element
   const EigenRowArrayXXd& X = _element->dof_reference_coordinates();

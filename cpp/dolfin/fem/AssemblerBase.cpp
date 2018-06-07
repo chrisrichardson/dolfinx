@@ -20,6 +20,7 @@
 #include <dolfin/log/log.h>
 #include <dolfin/mesh/Cell.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/MeshPartitioning.h>
 #include <memory>
 #include <vector>
 
@@ -29,14 +30,14 @@ using namespace dolfin::fem;
 //-----------------------------------------------------------------------------
 void AssemblerBase::init_global_tensor(la::PETScVector& b, const Form& L)
 {
-  fem::init(b, L);
+  b = fem::init_vector(L);
   if (!add_values)
-    b.zero();
+    b.set(0.0);
 }
 //-----------------------------------------------------------------------------
 void AssemblerBase::init_global_tensor(la::PETScMatrix& A, const Form& a)
 {
-  fem::init(A, a);
+  A = fem::init_matrix(a);
   if (!add_values)
     A.zero();
 }
@@ -51,8 +52,9 @@ void AssemblerBase::check(const Form& a)
   if (a.integrals().num_interior_facet_integrals() > 0
       and MPI::size(mesh.mpi_comm()) > 1)
   {
-    std::string ghost_mode = mesh.get_ghost_mode();
-    if (!(ghost_mode == "shared_vertex" or ghost_mode == "shared_facet"))
+    mesh::GhostMode ghost_mode = mesh.get_ghost_mode();
+    if (!(ghost_mode == mesh::GhostMode::shared_vertex
+          or ghost_mode == mesh::GhostMode::shared_facet))
     {
       throw std::runtime_error(
           "Incorrect mesh ghost mode.  Expected \"shared_vertex\" or "
