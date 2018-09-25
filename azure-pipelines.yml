@@ -15,4 +15,12 @@ steps:
   fetchDepth: 5
   submodules: true
 
+- bash: |
+    pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
+    pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
+    pip3 install git+https://bitbucket.org/fenics-project/dijitso.git --upgrade
+    pip3 install git+https://github.com/FEniCS/ffcx --upgrade
+    rm -rf /usr/local/include/dolfin /usr/local/include/dolfin.h
+  displayName: Install dependencies
+
 - script: cd cpp && mkdir build && cd build && cmake ..
