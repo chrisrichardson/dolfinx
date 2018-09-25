@@ -2,8 +2,12 @@
 pool:
   vmImage: 'Ubuntu 16.04'
 
-variables:
-  imageName: 'quay.io/fenicsproject/dolfinx:latest'
+resources:
+  containers:
+  - container: dolfinx
+    image: 'quay.io/fenicsproject/dolfinx:latest'
+
+container: dolfinx
 
 steps:
 - checkout: self
