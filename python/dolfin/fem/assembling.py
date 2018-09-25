@@ -15,56 +15,17 @@ The C++ PDE classes are reimplemented in Python since the C++ classes
 rely on the dolfin::Form class which is not used on the Python side.
 
 """
+import functools
+import typing
 
 import ufl
-import dolfin.cpp as cpp
+
+from dolfin import cpp
 from dolfin.fem.form import Form
-
-__all__ = ["assemble_local", "SystemAssembler"]
-
-
-class Assembler:
-    def __init__(self, a, L, bcs=None, form_compiler_parameters=None):
-
-        self.a = a
-        self.L = L
-        if bcs is None:
-            self.bcs = []
-        else:
-            self.bcs = bcs
-        self.assembler = None
-
-    def assemble(self, A=None, b=None, mat_type=cpp.fem.Assembler.BlockType.monolithic):
-        if self.assembler is None:
-            # Compile forms
-            try:
-                a_forms = [[_create_dolfin_form(a)
-                            for a in row] for row in self.a]
-            except TypeError:
-                a_forms = [[_create_dolfin_form(self.a)]]
-            try:
-                L_forms = [_create_dolfin_form(L) for L in self.L]
-            except TypeError:
-                L_forms = [_create_dolfin_form(self.L)]
-
-            # Create assembler
-            self.assembler = cpp.fem.Assembler(a_forms, L_forms, self.bcs)
-
-        # Create matrix/vector (if required)
-        if A is None:
-            A = cpp.la.PETScMatrix()
-        if b is None:
-            b = cpp.la.PETScVector()
-
-        # self.assembler.assemble(A, b)
-        self.assembler.assemble(A, mat_type)
-        self.assembler.assemble(b, mat_type)
-        return A, b
+from dolfin.fem.dirichletbc import DirichletBC
 
 
-def _create_dolfin_form(form,
-                        form_compiler_parameters=None,
-                        function_spaces=None):
+def _create_cpp_form(form, form_compiler_parameters=None):
     # First check if we got a cpp.Form
     if isinstance(form, cpp.fem.Form):
 
@@ -79,10 +40,9 @@ def _create_dolfin_form(form,
                 "Ignoring form_compiler_parameters when passed a dolfin Form!")
         return form
     elif isinstance(form, ufl.Form):
-        return Form(
-            form,
-            form_compiler_parameters=form_compiler_parameters,
-            function_spaces=function_spaces)
+        form = Form(
+            form, form_compiler_parameters=form_compiler_parameters)
+        return form._cpp_object
     else:
         raise TypeError("Invalid form type %s" % (type(form), ))
 
@@ -93,7 +53,7 @@ def assemble_local(form, cell, form_compiler_parameters=None):
     if isinstance(form, cpp.fem.Form):
         dolfin_form = form
     else:
-        dolfin_form = _create_dolfin_form(form, form_compiler_parameters)
+        dolfin_form = _create_cpp_form(form, form_compiler_parameters)
     result = cpp.fem.assemble_local(dolfin_form, cell)
     if result.shape[1] == 1:
         if result.shape[0] == 1:
@@ -148,8 +108,8 @@ def assemble_system(A_form,
     """
     # Create dolfin Form objects referencing all data needed by
     # assembler
-    A_dolfin_form = _create_dolfin_form(A_form, form_compiler_parameters)
-    b_dolfin_form = _create_dolfin_form(b_form, form_compiler_parameters)
+    A_dolfin_form = _create_cpp_form(A_form, form_compiler_parameters)
+    b_dolfin_form = _create_cpp_form(b_form, form_compiler_parameters)
 
     # Create tensors
     if A_tensor is None:
@@ -234,8 +194,8 @@ class SystemAssembler(cpp.fem.SystemAssembler):
         """
         # Create dolfin Form objects referencing all data needed by
         # assembler
-        A_dolfin_form = _create_dolfin_form(A_form, form_compiler_parameters)
-        b_dolfin_form = _create_dolfin_form(b_form, form_compiler_parameters)
+        A_dolfin_form = _create_cpp_form(A_form, form_compiler_parameters)
+        b_dolfin_form = _create_cpp_form(b_form, form_compiler_parameters)
 
         # Check bcs
         bcs = _wrap_in_list(bcs, 'bcs', cpp.fem.DirichletBC)
@@ -247,3 +207,70 @@ class SystemAssembler(cpp.fem.SystemAssembler):
         # Keep Python counterpart of bcs (and Python object it owns)
         # alive
         self._bcs = bcs
+
+
+@functools.singledispatch
+def assemble(M: typing.Union[Form, cpp.fem.Form]
+             ) -> typing.Union[float, cpp.la.PETScMatrix, cpp.la.PETScVector]:
+    """Assemble a form over mesh"""
+    M_cpp = _create_cpp_form(M)
+    return cpp.fem.assemble(M_cpp)
+
+
+@assemble.register(cpp.la.PETScVector)
+def _assemble_vector(b: cpp.la.PETScVector,
+                     L,
+                     a=[],
+                     bcs: typing.List[DirichletBC] = [],
+                     scale: float = 1.0) -> cpp.la.PETScVector:
+    """Re-assemble linear form into a vector, with modification for Dirichlet
+    boundary conditions
+
+    """
+    try:
+        L_cpp = [_create_cpp_form(form) for form in L]
+        a_cpp = [[_create_cpp_form(form) for form in row] for row in a]
+    except TypeError:
+        L_cpp = [_create_cpp_form(L)]
+        a_cpp = [[_create_cpp_form(form) for form in a]]
+
+    cpp.fem.reassemble_blocked_vector(b, L_cpp, a_cpp, bcs, scale)
+    return b
+
+
+@assemble.register(cpp.la.PETScMatrix)
+def _assemble_matrix(A: cpp.la.PETScMatrix, a, bcs=[]) -> cpp.la.PETScMatrix:
+    """Re-assemble bilinear form into a vector, with rows and columns with Dirichlet
+    boundary conditions zeroed.
+
+    """
+    try:
+        a_cpp = [[_create_cpp_form(form) for form in row] for row in a]
+    except TypeError:
+        a_cpp = [[_create_cpp_form(a)]]
+    cpp.fem.reassemble_blocked_matrix(A, a_cpp, bcs)
+    return A
+
+
+def assemble_vector(L,
+                    a,
+                    bcs: typing.List[DirichletBC],
+                    block_type: cpp.fem.BlockType,
+                    scale: float = 1.0) -> cpp.la.PETScVector:
+    """Assemble linear form into vector"""
+    L_cpp = [_create_cpp_form(form) for form in L]
+    a_cpp = [[_create_cpp_form(form) for form in row] for row in a]
+    return cpp.fem.assemble_blocked_vector(L_cpp, a_cpp, bcs, block_type,
+                                           scale)
+
+
+def assemble_matrix(a, bcs: typing.List[DirichletBC],
+                    block_type) -> cpp.la.PETScMatrix:
+    """Assemble bilinear forms into matrix"""
+    a_cpp = [[_create_cpp_form(form) for form in row] for row in a]
+    return cpp.fem.assemble_blocked_matrix(a_cpp, bcs, block_type)
+
+
+def set_bc(b: cpp.la.PETScVector, L, bcs: typing.List[DirichletBC]) -> None:
+    """Insert boundary condition values into vector"""
+    cpp.fem.set_bc(b, L, bcs)

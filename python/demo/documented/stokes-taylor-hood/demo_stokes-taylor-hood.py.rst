@@ -85,6 +85,7 @@ following way::
 
     import dolfin
     from dolfin import *
+    from dolfin.io import XDMFFile
 
     # Load mesh and subdomains
     xdmf = XDMFFile(MPI.comm_world, "../dolfin_fine.xdmf")
@@ -142,7 +143,7 @@ formulation of the Stokes equations are defined as follows::
     (u, p) = TrialFunctions(W)
     (v, q) = TestFunctions(W)
     f = Constant((0, 0))
-    a = (inner(grad(u), grad(v)) - div(v)*p + q*div(u))*dx
+    a = (inner(grad(u), grad(v)) - inner(p, div(v)) + inner(div(u), q))*dx
     L = inner(f, v)*dx
 
 We also need to create a :py:class:`Function
@@ -174,7 +175,7 @@ We can calculate the :math:`L^2` norms of u and p as follows::
     # Check pressure norm
     pnorm = p.vector().norm(dolfin.cpp.la.Norm.l2)
     import numpy as np
-    assert np.isclose(pnorm, 4116.91298427)
+    assert np.isclose(pnorm, 4147.69457577)
 
 Finally, we can save and plot the solutions::
 

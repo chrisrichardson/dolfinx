@@ -10,11 +10,16 @@
 #include <cstdint>
 #include <petscsys.h>
 
+// Typedefs for ufc_scalar - to be used in UFC.h
+#ifdef PETSC_USE_COMPLEX
+#include <complex>
+using ufc_scalar_t = std::complex<double>;
+#else
+using ufc_scalar_t = double;
+#endif
+
 namespace dolfin
 {
-
-// Index type for compatibility with linear algebra backend
-using la_index_t = PetscInt;
 
 // Typedefs for Eigen
 
@@ -41,8 +46,8 @@ using EigenRowArrayXi64 = Eigen::Array<std::int64_t, 1, Eigen::Dynamic>;
 using EigenRowArrayXXi64 = Eigen::Array<std::int64_t, Eigen::Dynamic,
                                         Eigen::Dynamic, Eigen::RowMajor>;
 
-// la_index_t Arrays
-using EigenArrayXlaindex = Eigen::Array<dolfin::la_index_t, Eigen::Dynamic, 1>;
+// PetscInt Arrays
+using EigenArrayXpetscint = Eigen::Array<PetscInt, Eigen::Dynamic, 1>;
 
 // double Matrices
 using EigenRowMatrixXd

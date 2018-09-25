@@ -45,7 +45,6 @@ void common(py::module& m)
   m.def("has_debug", &dolfin::has_debug);
   m.def("has_hdf5", &dolfin::has_hdf5);
   m.def("has_hdf5_parallel", &dolfin::has_hdf5_parallel);
-  m.def("has_mpi", &dolfin::has_mpi);
   m.def("has_mpi4py",
         []() {
 #ifdef HAS_PYBIND11_MPI4PY
@@ -57,6 +56,8 @@ void common(py::module& m)
         "Return `True` if DOLFIN is configured with mpi4py");
   m.def("has_parmetis", &dolfin::has_parmetis);
   m.def("has_scotch", &dolfin::has_scotch);
+  m.def("has_petsc_complex", &dolfin::has_petsc_complex,
+        "Return True if PETSc scalar is complex.");
   m.def("has_slepc", &dolfin::has_slepc,
         "Return `True` if DOLFIN is configured with SLEPc");
   m.def("has_petsc4py",
@@ -79,7 +80,6 @@ void common(py::module& m)
         "Return `True` if DOLFIN is configured with slepc4py");
   m.def("git_commit_hash", &dolfin::git_commit_hash,
         "Returns git hash for this build.");
-  m.def("sizeof_la_index_t", &dolfin::sizeof_la_index_t);
 
   m.attr("DOLFIN_EPS") = DOLFIN_EPS;
   m.attr("DOLFIN_PI") = DOLFIN_PI;

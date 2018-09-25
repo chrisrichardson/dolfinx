@@ -8,6 +8,7 @@
 
 #include <dolfin/common/types.h>
 #include <memory>
+#include <petscsys.h>
 #include <ufc.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
@@ -163,15 +164,18 @@ public:
   ///         The coordinates of all dofs on the reference cell.
   const EigenRowArrayXXd& dof_reference_coordinates() const { return _refX; }
 
-  // FIXME: pass coordinate map
-  /// TODO: Remove? Document. See:
-  /// ffc/uflacs/backends/ufc/evaluatedof.py:_change_variables()
-  void map_dofs(double* values, const Eigen::Ref<const EigenRowArrayXXd>& vals,
-                const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const
+  /// Map values of field from physical to reference space which has
+  /// been evaluated at points given by dof_reference_coordinates()
+  void transform_values(
+      PetscScalar* reference_values,
+      const Eigen::Ref<const Eigen::Array<PetscScalar, Eigen::Dynamic,
+                                          Eigen::Dynamic, Eigen::RowMajor>>&
+          physical_values,
+      const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const
   {
     assert(_ufc_element);
-    _ufc_element->map_dofs(values, vals.data(), coordinate_dofs.data(), 1,
-                           nullptr);
+    _ufc_element->transform_values(reference_values, physical_values.data(),
+                                   coordinate_dofs.data(), 1, nullptr);
   }
 
   /// Return the number of sub elements (for a mixed element)
@@ -214,5 +218,5 @@ private:
   // Simple hash of the signature string
   std::size_t _hash;
 };
-}
-}
+} // namespace fem
+} // namespace dolfin

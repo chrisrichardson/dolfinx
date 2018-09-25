@@ -6,7 +6,7 @@
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 """Simpler interface for solving linear systems"""
 
-import dolfin.cpp as cpp
+from dolfin import cpp
 
 
 def solve(A, x, b, method="default", preconditioner="default"):
@@ -54,4 +54,7 @@ def solve(A, x, b, method="default", preconditioner="default"):
 
     """
 
-    return cpp.la.solve(A, x, b, method, preconditioner)
+    solver = cpp.la.PETScKrylovSolver(cpp.MPI.comm_world)
+    solver.set_operator(A)
+    solver.solve(x, b)
+    return x

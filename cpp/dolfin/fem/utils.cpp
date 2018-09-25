@@ -19,21 +19,10 @@
 #include <dolfin/mesh/Mesh.h>
 #include <dolfin/mesh/MeshIterator.h>
 #include <dolfin/mesh/Vertex.h>
+#include <memory>
 
 using namespace dolfin;
 
-//-----------------------------------------------------------------------------
-la::PETScVector dolfin::fem::init_vector(const Form& L)
-{
-  if (L.rank() != 1)
-    throw std::runtime_error("Cannot initialise vector. Form must be linear.");
-
-  auto dofmap = L.function_space(0)->dofmap();
-  auto index_map = dofmap->index_map();
-  assert(index_map);
-
-  return la::PETScVector(*index_map);
-}
 //-----------------------------------------------------------------------------
 la::PETScMatrix
 fem::init_nest_matrix(std::vector<std::vector<const fem::Form*>> a)
@@ -82,7 +71,8 @@ la::PETScVector fem::init_nest(std::vector<const fem::Form*> L)
   {
     if (L[i])
     {
-      vecs[i] = std::make_shared<la::PETScVector>(init_vector(*L[i]));
+      const common::IndexMap& index_map = *L[i]->function_space(0)->dofmap()->index_map();
+      vecs[i] = std::make_shared<la::PETScVector>(index_map);
       petsc_vecs[i] = vecs[i]->vec();
     }
     else
@@ -138,13 +128,10 @@ fem::init_monolithic_matrix(std::vector<std::vector<const fem::Form*>> a)
   }
 
   // Create merged sparsity pattern
-  // std::cout << "  Build merged sparsity pattern" << std::endl;
   la::SparsityPattern pattern(a[0][0]->mesh()->mpi_comm(), p);
 
   // Initialise matrix
-  // std::cout << "  Init parent matrix" << std::endl;
   la::PETScMatrix A(a[0][0]->mesh()->mpi_comm(), pattern);
-  // std::cout << "  Post init parent matrix" << std::endl;
 
   // Build list of row and column index maps (over each block)
   std::array<std::vector<const common::IndexMap*>, 2> index_maps;
@@ -184,8 +171,6 @@ fem::init_monolithic_matrix(std::vector<std::vector<const fem::Form*>> a)
     }
   }
 
-  // exit(0);
-
   // Create PETSc local-to-global map/index sets and attach to matrix
   ISLocalToGlobalMapping petsc_local_to_global0, petsc_local_to_global1;
   ISLocalToGlobalMappingCreate(MPI_COMM_SELF, 1, _maps[0].size(),
@@ -223,7 +208,7 @@ la::PETScVector fem::init_monolithic(std::vector<const fem::Form*> L)
   std::vector<std::size_t> ghosts;
   for (std::size_t i = 0; i < L.size(); ++i)
   {
-    const Eigen::Array<la_index_t, Eigen::Dynamic, 1>& field_ghosts
+    const Eigen::Array<PetscInt, Eigen::Dynamic, 1>& field_ghosts
         = index_maps[i]->ghosts();
     for (Eigen::Index j = 0; j < field_ghosts.size(); ++j)
     {
@@ -292,8 +277,8 @@ la::PETScMatrix dolfin::fem::init_matrix(const Form& a)
     assert(index_map_0.block_size() == 1);
 
     // Set zeros in dense rows in order of increasing column index
-    const double block = 0.0;
-    dolfin::la_index_t IJ[2];
+    const PetscScalar block = 0.0;
+    PetscInt IJ[2];
     for (Eigen::Index i = 0; i < global_dofs.size(); ++i)
     {
       const std::int64_t I = index_map_0.local_to_global(global_dofs[i]);
@@ -319,13 +304,13 @@ la::PETScMatrix dolfin::fem::init_matrix(const Form& a)
   if (keep_diagonal)
   {
     // Loop over rows and insert 0.0 on the diagonal
-    const double block = 0.0;
+    const PetscScalar block = 0.0;
     const auto row_range = A.local_range(0);
     const std::int64_t range = std::min(row_range[1], A.size()[1]);
 
     for (std::int64_t i = row_range[0]; i < range; i++)
     {
-      const dolfin::la_index_t _i = i;
+      const PetscInt _i = i;
       A.set(&block, 1, &_i, 1, &_i);
     }
 
@@ -341,8 +326,6 @@ dolfin::fem::get_global_index(const std::vector<const common::IndexMap*> maps,
 {
   // Get process that owns global index
   int owner = maps[field]->owner(n);
-  // if (MPI::rank(MPI_COMM_WORLD) == 1)
-  //   std::cout << "    owning process: " << owner << std::endl;
 
   // Offset from lower rank processes
   std::size_t offset = 0;
@@ -350,22 +333,14 @@ dolfin::fem::get_global_index(const std::vector<const common::IndexMap*> maps,
   {
     for (std::size_t j = 0; j < maps.size(); ++j)
     {
-      // if (MPI::rank(MPI_COMM_WORLD) == 1)
-      //   std::cout << "   p off: " << maps[j]->_all_ranges[owner] <<
-      //   std::endl;
       if (j != field)
-      {
         offset += maps[j]->_all_ranges[owner];
-      }
     }
   }
 
   // Local (process) offset
   for (unsigned int i = 0; i < field; ++i)
     offset += (maps[i]->_all_ranges[owner + 1] - maps[i]->_all_ranges[owner]);
-
-  // if (MPI::rank(MPI_COMM_WORLD) == 2)
-  //   std::cout << "    proc offeset (2): " << offset << std::endl;
 
   return n + offset;
 }

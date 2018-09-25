@@ -136,7 +136,7 @@ void HDF5File::write(const la::PETScVector& x, const std::string dataset_name)
   assert(_hdf5_file_id > 0);
 
   // Get all local data
-  std::vector<double> local_data;
+  std::vector<PetscScalar> local_data;
   x.get_local(local_data);
 
   // Write data to file
@@ -210,7 +210,7 @@ la::PETScVector HDF5File::read_vector(MPI_Comm comm,
     x = la::PETScVector(comm,
                         {{(std::int64_t)partitions[process_num],
                           (std::int64_t)partitions[process_num + 1]}},
-                        Eigen::Array<la_index_t, Eigen::Dynamic, 1>(), 1);
+                        Eigen::Array<PetscInt, Eigen::Dynamic, 1>(), 1);
   }
   else
   {
@@ -223,7 +223,7 @@ la::PETScVector HDF5File::read_vector(MPI_Comm comm,
   const std::array<std::int64_t, 2> local_range = x.local_range();
 
   // Read data from file
-  std::vector<double> data = HDF5Interface::read_dataset<double>(
+  std::vector<PetscScalar> data = HDF5Interface::read_dataset<PetscScalar>(
       _hdf5_file_id, dataset_name, local_range);
 
   // Set data
@@ -266,8 +266,9 @@ void HDF5File::write(const mesh::Mesh& mesh, std::size_t cell_dim,
       _vertex_coords = mesh.geometry().points();
     else
     {
-      _vertex_coords
-          = mesh::DistributedMeshTools::reorder_points_by_global_indices(mesh);
+      _vertex_coords = mesh::DistributedMeshTools::reorder_by_global_indices(
+          mesh.mpi_comm(), mesh.geometry().points(),
+          mesh.geometry().global_indices());
     }
     std::vector<double> vertex_coords(
         _vertex_coords.data(), _vertex_coords.data() + _vertex_coords.size());
@@ -828,12 +829,12 @@ void HDF5File::write(const function::Function& u, const std::string name)
   // the start of each row
 
   const std::size_t tdim = mesh.topology().dim();
-  std::vector<dolfin::la_index_t> cell_dofs;
+  std::vector<PetscInt> cell_dofs;
   std::vector<std::size_t> x_cell_dofs;
   const std::size_t n_cells = mesh.topology().ghost_offset(tdim);
   x_cell_dofs.reserve(n_cells);
 
-  std::vector<std::size_t> local_to_global_map
+  Eigen::Array<std::size_t, Eigen::Dynamic, 1> local_to_global_map
       = dofmap.tabulate_local_to_global_dofs();
 
   for (std::size_t i = 0; i != n_cells; ++i)
@@ -843,7 +844,7 @@ void HDF5File::write(const function::Function& u, const std::string name)
     for (Eigen::Index j = 0; j < cell_dofs_i.size(); ++j)
     {
       auto p = cell_dofs_i[j];
-      assert(p < (dolfin::la_index_t)local_to_global_map.size());
+      assert(p < (PetscInt)local_to_global_map.size());
       cell_dofs.push_back(local_to_global_map[p]);
     }
   }
@@ -991,10 +992,9 @@ HDF5File::read(std::shared_ptr<const function::FunctionSpace> V,
           {{cell_range[0], cell_range[1] + 1}});
 
   // Read cell-DOF maps
-  std::vector<dolfin::la_index_t> input_cell_dofs
-      = HDF5Interface::read_dataset<dolfin::la_index_t>(
-          _hdf5_file_id, cell_dofs_dataset_name,
-          {{x_cell_dofs.front(), x_cell_dofs.back()}});
+  std::vector<PetscInt> input_cell_dofs = HDF5Interface::read_dataset<PetscInt>(
+      _hdf5_file_id, cell_dofs_dataset_name,
+      {{x_cell_dofs.front(), x_cell_dofs.back()}});
 
   la::PETScVector& x = *u.vector();
 
@@ -1005,8 +1005,9 @@ HDF5File::read(std::shared_ptr<const function::FunctionSpace> V,
   const std::array<std::int64_t, 2> input_vector_range
       = MPI::local_range(_mpi_comm.comm(), vector_shape[0]);
 
-  std::vector<double> input_values = HDF5Interface::read_dataset<double>(
-      _hdf5_file_id, vector_dataset_name, input_vector_range);
+  std::vector<PetscScalar> input_values
+      = HDF5Interface::read_dataset<PetscScalar>(
+          _hdf5_file_id, vector_dataset_name, input_vector_range);
 
   // HDF5Utility::set_local_vector_values(_mpi_comm.comm(), x, mesh,
   // input_cells,

@@ -166,7 +166,7 @@ void la(py::module& m)
       .def(py::init(
           [](const MPICommWrapper comm, std::array<std::int64_t, 2> range,
              const Eigen::Ref<
-                 const Eigen::Array<dolfin::la_index_t, Eigen::Dynamic, 1>>
+                 const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>
                  ghost_indices,
              int block_size) {
             return dolfin::la::PETScVector(comm.get(), range, ghost_indices,
@@ -319,6 +319,8 @@ void la(py::module& m)
            py::arg("tol") = 1.0e-10)
       .def("is_orthogonal", &dolfin::la::VectorSpaceBasis::is_orthogonal,
            py::arg("tol") = 1.0e-10)
+      .def("in_nullspace", &dolfin::la::VectorSpaceBasis::in_nullspace,
+           py::arg("A"), py::arg("tol") = 1.0e-10)
       .def("orthogonalize", &dolfin::la::VectorSpaceBasis::orthogonalize)
       .def("orthonormalize", &dolfin::la::VectorSpaceBasis::orthonormalize,
            py::arg("tol") = 1.0e-10)
