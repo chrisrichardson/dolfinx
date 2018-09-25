@@ -15,4 +15,4 @@ steps:
   fetchDepth: 5
   submodules: true
 
-- script: printenv
+- script: ls -l && mkdir build && cd build && cmake ..
