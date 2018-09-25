@@ -11,14 +11,4 @@ steps:
   fetchDepth: 5
   submodules: true
 
-- task: docker@0
-  displayName: Setup
-  inputs:
-    action: 'Run'
-    imageName: $(imageName)
-    volumes: |
-      $(build.sourcesDirectory):/src
-      $(build.binariesDirectory):/build
-    workDir: '/build'
-    containerCommand: 'cmake -DENABLE_TESTING=ON ${{ parameters.cmakeOptions }} /src'
-    detached: false
+- script: printenv
