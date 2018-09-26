@@ -26,5 +26,5 @@ steps:
 - bash: |
     cd cpp && mkdir build && cd build && cmake ..
     make -j 4
-    make install
+    sudo make install
   displayName: Configure and build C++
