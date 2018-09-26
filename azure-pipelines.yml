@@ -23,4 +23,8 @@ steps:
     rm -rf /usr/local/include/dolfin /usr/local/include/dolfin.h
   displayName: Install dependencies
 
-- script: cd cpp && mkdir build && cd build && cmake ..
+- bash: |
+    cd cpp && mkdir build && cd build && cmake ..
+    make -j 4
+    make install
+  displayName: Configure and build C++
