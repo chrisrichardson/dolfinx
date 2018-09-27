@@ -24,8 +24,19 @@ steps:
   displayName: Install dependencies
 
 - bash: |
-    whoami
     cd cpp && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
     make -j 4
     make install
   displayName: Configure and build C++
+
+- bash: |
+    source $HOME/FEniCS/share/dolfin/dolfin.conf
+    cd python
+    python3 setup.py install --prefix=$HOME/.local
+  displayName: Build and install Python interface
+
+- bash: |
+    source $HOME/FEniCS/share/dolfin/dolfin.conf
+    cd python/test/unit
+    python3 -m pytest .
+  displayName: Python unit tests
