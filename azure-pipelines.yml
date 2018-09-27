@@ -24,7 +24,8 @@ steps:
   displayName: Install dependencies
 
 - bash: |
-    cd cpp && mkdir build && cd build && cmake ..
+    whoami
+    cd cpp && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
     make -j 4
-    sudo make install
+    make install
   displayName: Configure and build C++
