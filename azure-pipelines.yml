@@ -16,6 +16,7 @@ steps:
   submodules: true
 
 - bash: |
+    pip3 install pytest
     pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
     pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
     pip3 install git+https://bitbucket.org/fenics-project/dijitso.git --upgrade
