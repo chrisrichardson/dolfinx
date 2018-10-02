@@ -1,0 +1,20 @@
+
+steps:
+- checkout: self
+  clean: true
+  fetchDepth: 5
+  submodules: true
+
+- bash: |
+    brew update
+    brew install cmake pkg-config eigen hdf5 boost
+  displayName: Install Homebrew dependencies
+
+- task: CMake@1
+  displayName: CMake
+  inputs:
+    cmakeArgs: -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS
+
+- script: make -j4
+  displayName: Build
+  workingDirectory: build
