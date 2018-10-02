@@ -15,7 +15,7 @@ jobs:
   steps:
   - template: ./ubuntu-steps.yml
 
--job: MacOS
+- job: MacOS
   displayName: MacOS CI Test
 
   pool:
