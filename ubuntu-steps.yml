@@ -1,9 +1,3 @@
-resources:
-  containers:
-  - container: dolfinx
-    image: 'quay.io/fenicsproject/dolfinx:latest'
-
-container: dolfinx
 
 steps:
 - checkout: self

@@ -1,9 +1,16 @@
+resources:
+  containers:
+  - container: dolfinx
+    image: 'quay.io/fenicsproject/dolfinx:latest'
+
 jobs:
 - job: Ubuntu
   displayName: Ubuntu CI Test
 
   pool:
     vmImage: 'Ubuntu 16.04'
+
+  container: dolfinx
 
   steps:
   - template: ./ubuntu-steps.yml
