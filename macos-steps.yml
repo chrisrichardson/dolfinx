@@ -7,8 +7,13 @@ steps:
 
 - bash: |
     brew update
-    brew install cmake pkg-config eigen open-mpi hdf5 boost
-  displayName: Install Homebrew dependencies
+    brew install cmake pkg-config eigen open-mpi hdf5 boost python3
+    pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme --upgrade
+    pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
+    pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
+    pip3 install git+https://bitbucket.org/fenics-project/dijitso.git --upgrade
+    pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
+  displayName: Install Homebrew dependencies and Python3 dependencies
 
 - task: CMake@1
   displayName: CMake
