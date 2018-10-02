@@ -5,13 +5,6 @@ jobs:
   pool:
     vmImage: 'Ubuntu 16.04'
 
-  resources:
-    containers:
-    - container: dolfinx
-      image: 'quay.io/fenicsproject/dolfinx:latest'
-
-  container: dolfinx
-
   steps:
   - template: ./ubuntu-steps.yml
 
