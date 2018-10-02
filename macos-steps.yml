@@ -13,8 +13,9 @@ steps:
 - task: CMake@1
   displayName: CMake
   inputs:
-    cmakeArgs: -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS
+    workingDirectory: cpp/build
+    cmakeArgs: '-DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..'
 
 - script: make -j4
   displayName: Build
-  workingDirectory: build
+  workingDirectory: cpp/build
