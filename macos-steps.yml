@@ -7,7 +7,7 @@ steps:
 
 - bash: |
     brew update
-    brew install cmake pkg-config eigen hdf5 boost
+    brew install cmake pkg-config eigen open-mpi hdf5 boost
   displayName: Install Homebrew dependencies
 
 - task: CMake@1
