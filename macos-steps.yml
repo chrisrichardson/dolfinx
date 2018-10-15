@@ -6,6 +6,8 @@ steps:
   submodules: true
 
 - bash: |
+    brew update
+    brew install cmake pkg-config eigen open-mpi hdf5 boost python3
     brew install bison flex
     wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-3.10.2.tar.gz
     tar xf petsc-lite-3.10.2.tar.gz
@@ -32,8 +34,6 @@ steps:
   displayName: Install PETSc
 
 - bash: |
-    brew update
-    brew install cmake pkg-config eigen open-mpi hdf5 boost python3
     pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme --upgrade
     pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
     pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
