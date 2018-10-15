@@ -15,6 +15,32 @@ steps:
     pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
   displayName: Install Homebrew dependencies and Python3 dependencies
 
+- bash: |
+    brew install bison flex
+    wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-3.10.2.tar.gz
+    tar xf petsc-lite-3.10.2.tar.gz
+    cd petsc-3.10.2 && \
+    ./configure \
+    --COPTFLAGS="-O2 -g" \
+    --CXXOPTFLAGS="-O2 -g" \
+    --FOPTFLAGS="-O2 -g" \
+    --with-debugging=yes \
+    --with-fortran-bindings=no \
+    --download-blacs \
+    --download-hypre \
+    --download-metis \
+    --download-mumps \
+    --download-ptscotch \
+    --download-scalapack \
+    --download-spai \
+    --download-suitesparse \
+    --download-superlu \
+    --with-scalar-type=real \
+    --prefix=/usr/local && \
+    make && \
+    make install
+  displayName: Install PETSc
+
 - task: CMake@1
   displayName: CMake
   inputs:
