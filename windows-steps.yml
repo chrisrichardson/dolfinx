@@ -9,13 +9,20 @@ steps:
   displayName: Install dependencies
   inputs:
     createCustomEnvironment: True
-    environmentName: shogun
-    packageSpecs: 'python=3.6.* setuptools cffi decorator flake8 matplotlib pytest pytest-xdist numpy eigen zlib ctags ply mkl-devel jinja2'
+    environmentName: fenics
+    packageSpecs: 'python=3.6.* setuptools cffi decorator flake8 matplotlib pytest pytest-xdist numpy eigen zlib ply mkl-devel pip python-wget'
     createOptions: '-c conda-forge'
     updateConda: false
 
 - bash: |
-    wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-3.10.2.tar.gz
+    pip install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
+    pip install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
+    pip install git+https://bitbucket.org/fenics-project/dijitso.git --upgrade
+    pip install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
+  displayName: Install Python3 dependencies
+
+- bash: |
+    python3 -m wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-3.10.2.tar.gz
     tar xf petsc-lite-3.10.2.tar.gz
     cd petsc-3.10.2 && \
     ./configure \
@@ -39,13 +46,6 @@ steps:
     sudo make install
   displayName: Install PETSc
 
-
-- bash: |
-    pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
-    pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
-    pip3 install git+https://bitbucket.org/fenics-project/dijitso.git --upgrade
-    pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
-  displayName: Install Homebrew dependencies and Python3 dependencies
 
 - task: CMake@1
   displayName: CMake
