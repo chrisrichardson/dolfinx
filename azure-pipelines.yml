@@ -3,7 +3,8 @@
 #   - container: dolfinx
 #     image: 'quay.io/fenicsproject/dolfinx:latest'
 
-# jobs:
+jobs:
+
 # - job: Ubuntu
 #   displayName: Ubuntu CI Test
 
