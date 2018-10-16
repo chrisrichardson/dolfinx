@@ -10,11 +10,12 @@ steps:
   inputs:
     createCustomEnvironment: True
     environmentName: fenics
-    packageSpecs: 'python=3.6.* setuptools cffi decorator flake8 matplotlib pytest pytest-xdist numpy eigen zlib ply mkl-devel pip python-wget'
+    packageSpecs: 'python=3.6.* pip eigen zlib'
     createOptions: '-c conda-forge'
     updateConda: false
 
 - bash: |
+    pip install setuptools cffi decorator flake8 matplotlib pytest pytest-xdist numpy ply python-wget --upgrade
     pip install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
     pip install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
     pip install git+https://bitbucket.org/fenics-project/dijitso.git --upgrade
@@ -22,7 +23,7 @@ steps:
   displayName: Install Python3 dependencies
 
 - bash: |
-    python3 -m wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-3.10.2.tar.gz
+    python -m wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-3.10.2.tar.gz
     tar xf petsc-lite-3.10.2.tar.gz
     cd petsc-3.10.2 && \
     ./configure \
