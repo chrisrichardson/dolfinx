@@ -3,23 +3,32 @@ resources:
   - container: dolfinx
     image: 'quay.io/fenicsproject/dolfinx:latest'
 
-jobs:
-- job: Ubuntu
-  displayName: Ubuntu CI Test
+# jobs:
+# - job: Ubuntu
+#   displayName: Ubuntu CI Test
+
+#   pool:
+#     vmImage: 'Ubuntu 16.04'
+
+#   container: dolfinx
+
+#   steps:
+#   - template: ./ubuntu-steps.yml
+
+# - job: MacOS
+#   displayName: MacOS CI Test
+
+#   pool:
+#     vmImage: xcode9-macos10.13
+
+#   steps:
+#   - template: ./macos-steps.yml
+
+- job: Windows
+  displayName: Windows CI Test
 
   pool:
-    vmImage: 'Ubuntu 16.04'
-
-  container: dolfinx
+    vmImage: vs2017-win2016
 
   steps:
-  - template: ./ubuntu-steps.yml
-
-- job: MacOS
-  displayName: MacOS CI Test
-
-  pool:
-    vmImage: xcode9-macos10.13
-
-  steps:
-  - template: ./macos-steps.yml
+  - template: ./windows-steps.yml
