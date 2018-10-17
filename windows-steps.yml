@@ -10,12 +10,12 @@ steps:
   inputs:
     createCustomEnvironment: True
     environmentName: fenics
-    packageSpecs: 'python=3.6.* pip eigen zlib'
+    packageSpecs: 'python=3.6.* pip eigen zlib python-wget'
     createOptions: '-c conda-forge'
     updateConda: false
 
 - bash: |
-    pip install setuptools cffi decorator flake8 matplotlib pytest pytest-xdist numpy ply python-wget --upgrade
+    pip install setuptools cffi decorator flake8 matplotlib pytest pytest-xdist numpy ply --upgrade
     pip install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
     pip install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
     pip install git+https://bitbucket.org/fenics-project/dijitso.git --upgrade

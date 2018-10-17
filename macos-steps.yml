@@ -5,9 +5,25 @@ steps:
   fetchDepth: 5
   submodules: true
 
+- task: DownloadBuildArtifacts@0
+  inputs:
+    buildType: specific
+    project: fenics
+    pipeline: chrisrichardson.petsc
+    buildVersionToDownload: latest
+    downloadType: single
+    artifactName: petsc_tarball
+  displayName: Download PETSc install for MacOS
+
+- bash: |
+    pwd
+    ls -l
+    echo $SYSTEM_ARTIFACTSDIRECTORY
+    ls -l $SYSTEM_ARTIFACTSDIRECTORY
+
 - bash: |
     brew update
-    brew install cmake pkg-config eigen open-mpi boost python3 bison flex
+    brew install pkg-config eigen open-mpi boost python3 bison flex
     brew install hdf5 --with-mpi
     wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-3.10.2.tar.gz
     tar xf petsc-lite-3.10.2.tar.gz
