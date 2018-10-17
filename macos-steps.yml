@@ -18,7 +18,7 @@ steps:
 - bash: |
     echo $SYSTEM_ARTIFACTSDIRECTORY
     cd /
-    sudo tar xf $SYSTEM_ARTIFACTSDIRECTORY/petsc-install-macos.tar.gz
+    sudo tar xf $SYSTEM_ARTIFACTSDIRECTORY/petsc_tarball/petsc-install-macos.tar.gz
   displayName: Extract PETSc install
 
 - bash: |
