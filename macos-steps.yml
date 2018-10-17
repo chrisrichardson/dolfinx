@@ -16,10 +16,10 @@ steps:
   displayName: Download PETSc install for MacOS
 
 - bash: |
-    pwd
-    ls -l
     echo $SYSTEM_ARTIFACTSDIRECTORY
-    ls -l $SYSTEM_ARTIFACTSDIRECTORY
+    cd /
+    sudo tar xf $SYSTEM_ARTIFACTSDIRECTORY/petsc-install-macos.tar.gz
+  displayName: Extract PETSc install
 
 - bash: |
     brew update
