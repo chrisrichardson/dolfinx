@@ -9,7 +9,7 @@ steps:
   inputs:
     buildType: specific
     project: fenics
-    pipeline: chrisrichardson.petsc
+    pipeline: petsc-builder
     buildVersionToDownload: latest
     downloadType: single
     artifactName: petsc_tarball
@@ -74,6 +74,7 @@ steps:
 
 - bash: |
     source /usr/local/share/dolfin/dolfin.conf
+    export PETSC_DIR=/usr/local/petsc
     python3 -m pytest -s -v .
   displayName: Run Python unit tests
   workingDirectory: python/test/unit
