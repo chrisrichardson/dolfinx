@@ -44,5 +44,12 @@ steps:
 
 - bash: |
     make -j4
-  displayName: Build
+    make install
+  displayName: Build and install C++
   workingDirectory: cpp/build
+
+- bash: |
+    source $HOME/FEniCS/share/dolfin/dolfin.conf
+    python3 setup.py build
+  displayName: Python build
+  workingDirectory: python
