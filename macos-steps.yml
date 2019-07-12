@@ -68,5 +68,11 @@ steps:
     export HDF5_DIR=/usr/local/petsc
     pip3 install petsc4py==3.11.0 mpi4py
     python3 setup.py build
+    sudo python3 setup.py install
   displayName: Python build
   workingDirectory: python
+
+- bash: |
+    python3 -m pytest -s -v .
+  displayName: Run Python unit tests
+  workingDirectory: python/test/unit
