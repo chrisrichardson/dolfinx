@@ -62,6 +62,9 @@ steps:
 
 - bash: |
     source $HOME/FEniCS/share/dolfin/dolfin.conf
+    export PETSC_DIR=/usr/local/petsc
+    export HDF5_ROOT=/usr/local/petsc
+    export HDF5_DIR=/usr/local/petsc
     python3 setup.py build
   displayName: Python build
   workingDirectory: python
