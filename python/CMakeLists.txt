@@ -18,18 +18,17 @@ include(${DOLFIN_USE_FILE})
 # Create the binding library
 pybind11_add_module(cpp SHARED
   src/dolfin.cpp
-  src/parameter.cpp
   src/common.cpp
   src/fem.cpp
   src/function.cpp
   src/generation.cpp
   src/geometry.cpp
   src/graph.cpp
+  src/io.cpp
+  src/la.cpp
   src/log.cpp
   src/math.cpp
   src/mesh.cpp
-  src/io.cpp
-  src/la.cpp
   src/nls.cpp
   src/refinement.cpp
   src/MPICommWrapper.cpp)
@@ -42,14 +41,13 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # Check for petsc4py
-find_package(PETSc4py)
+find_package(PETSc4py REQUIRED)
 if (PETSC4PY_FOUND)
   target_include_directories(cpp PRIVATE ${PETSC4PY_INCLUDE_DIRS})
-  target_compile_definitions(cpp PRIVATE HAS_PYBIND11_PETSC4PY)
 endif()
 
 # Check for mpi4py
-find_package(MPI4PY)
+find_package(MPI4PY REQUIRED)
 if (MPI4PY_FOUND)
   target_include_directories(cpp PRIVATE ${MPI4PY_INCLUDE_DIR})
   target_compile_definitions(cpp PRIVATE HAS_PYBIND11_MPI4PY)

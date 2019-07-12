@@ -12,21 +12,15 @@ finite element space.
 """
 
 import ufl
-
-from dolfin import cpp
-from dolfin import function
-from dolfin import fem
-from dolfin import la
+from dolfin import cpp, fem, function, la
+from petsc4py import PETSc
 
 
 def project(v,
             V=None,
-            bcs=None,
+            bcs=[],
             mesh=None,
-            function=None,
-            solver_type="lu",
-            preconditioner_type="default",
-            form_compiler_parameters=None):
+            funct=None):
     """Return projection of given expression *v* onto the finite element
     space *V*.
 
@@ -42,13 +36,8 @@ def project(v,
             <dolfin.functions.functionspace.FunctionSpace>`
         mesh
             Optional argument :py:class:`mesh <dolfin.cpp.Mesh>`.
-        solver_type
-            see :py:func:`solve <dolfin.fem.solving.solve>` for options.
-        preconditioner_type
-            see :py:func:`solve <dolfin.fem.solving.solve>` for options.
-        form_compiler_parameters
-            see :py:class:`Parameters <dolfin.cpp.Parameters>` for more
-            information.
+        funct
+            Target function where result is stored.
 
     *Example of usage*
 
@@ -83,25 +72,29 @@ def project(v,
 
     # Ensure we have a mesh and attach to measure
     if mesh is None:
-        mesh = V.mesh()
+        mesh = V.mesh
     dx = ufl.dx(mesh)
 
     # Define variational problem for projection
     w = function.TestFunction(V)
     Pv = function.TrialFunction(V)
-    a = ufl.inner(w, Pv) * dx
-    L = ufl.inner(w, v) * dx
+    a = ufl.inner(Pv, w) * dx
+    L = ufl.inner(v, w) * dx
 
     # Assemble linear system
-    A, b = fem.assemble_system(
-        a, L, bcs=bcs, form_compiler_parameters=form_compiler_parameters)
+    A = fem.assemble_matrix(a, bcs)
+    A.assemble()
+    b = fem.assemble_vector(L)
+    fem.apply_lifting(b, [a], [bcs])
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    fem.set_bc(b, bcs)
 
     # Solve linear system for projection
-    if function is None:
-        function = function.Function(V)
-    la.solve(A, function.vector(), b, solver_type, preconditioner_type)
+    if funct is None:
+        funct = function.Function(V)
+    la.solve(A, funct.vector(), b)
 
-    return function
+    return funct
 
 
 def _extract_function_space(expression, mesh):
@@ -124,7 +117,7 @@ def _extract_function_space(expression, mesh):
         functions = ufl.algorithms.extract_coefficients(expression)
         for f in functions:
             if isinstance(f, function.Function):
-                mesh = f.function_space().mesh()
+                mesh = f.function_space().mesh
                 if mesh is not None:
                     break
 
@@ -135,11 +128,11 @@ def _extract_function_space(expression, mesh):
     # Create function space
     shape = expression.ufl_shape
     if shape == ():
-        V = function.FunctionSpace(mesh, "Lagrange", 1)
+        V = function.FunctionSpace(mesh, ("Lagrange", 1))
     elif len(shape) == 1:
-        V = function.VectorFunctionSpace(mesh, "Lagrange", 1, dim=shape[0])
+        V = function.VectorFunctionSpace(mesh, ("Lagrange", 1), dim=shape[0])
     elif len(shape) == 2:
-        V = function.TensorFunctionSpace(mesh, "Lagrange", 1, shape=shape)
+        V = function.TensorFunctionSpace(mesh, ("Lagrange", 1), shape=shape)
     else:
         raise RuntimeError("Unhandled rank, shape is {}.".format((shape, )))
 

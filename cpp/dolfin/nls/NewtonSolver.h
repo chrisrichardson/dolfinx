@@ -1,4 +1,4 @@
-// Copyright (C) 2005-2008 Garth N. Wells
+// Copyright (C) 2005-2019 Garth N. Wells
 //
 // This file is part of DOLFIN (https://www.fenicsproject.org)
 //
@@ -7,8 +7,9 @@
 #pragma once
 
 #include <dolfin/common/MPI.h>
-#include <dolfin/common/Variable.h>
+#include <dolfin/la/PETScKrylovSolver.h>
 #include <memory>
+#include <petscvec.h>
 #include <utility>
 
 namespace dolfin
@@ -16,10 +17,8 @@ namespace dolfin
 
 namespace la
 {
-class PETScMatrix;
-class PETScVector;
 class PETScKrylovSolver;
-}
+} // namespace la
 
 namespace nls
 {
@@ -29,7 +28,7 @@ class NonlinearProblem;
 /// This class defines a Newton solver for nonlinear systems of
 /// equations of the form \f$F(x) = 0\f$.
 
-class NewtonSolver : public common::Variable
+class NewtonSolver
 {
 public:
   /// Create nonlinear solver
@@ -44,27 +43,20 @@ public:
   ///
   /// @param    nonlinear_function (_NonlinearProblem_)
   ///         The nonlinear problem.
-  /// @param    x (_la::PETScVector_)
+  /// @param    x (_Vec_)
   ///         The vector.
   ///
   /// @returns    std::pair<std::size_t, bool>
   ///         Pair of number of Newton iterations, and whether
   ///         iteration converged)
-  std::pair<std::size_t, bool> solve(NonlinearProblem& nonlinear_function,
-                                     la::PETScVector& x);
-
-  /// Return current Newton iteration number
-  ///
-  /// @returns     std::size_t
-  ///         The iteration number.
-  std::size_t iteration() const;
+  std::pair<int, bool> solve(NonlinearProblem& nonlinear_function, Vec x);
 
   /// Return number of Krylov iterations elapsed since
   /// solve started
   ///
   /// @returns    std::size_t
   ///         The number of iterations.
-  std::size_t krylov_iterations() const;
+  int krylov_iterations() const;
 
   /// Return current residual
   ///
@@ -78,40 +70,33 @@ public:
   ///         Initial residual.
   double residual0() const;
 
-  /// Return current relative residual
-  ///
-  /// @returns double
-  ///       Current relative residual.
-  double relative_residual() const;
+  /// Maximum number of iterations
+  int max_it = 50;
 
-  /// Default parameter values
-  ///
-  /// @returns _Parameters_
-  ///         Parameter values.
-  static parameter::Parameters default_parameters();
+  /// Relative tolerance
+  double rtol = 1e-9;
 
-  /// Set relaxation parameter. Default value 1.0 means full
-  /// Newton method, value smaller than 1.0 relaxes the method
-  /// by shrinking effective Newton step size by the given factor.
-  ///
-  /// @param relaxation_parameter (double)
-  ///         Relaxation parameter value.
-  void set_relaxation_parameter(double relaxation_parameter)
-  {
-    _relaxation_parameter = relaxation_parameter;
-  }
+  /// Absolute tolerance
+  double atol = 1e-10;
 
-  /// Get relaxation parameter
-  ///
-  /// @returns    double
-  ///         Relaxation parameter value.
-  double get_relaxation_parameter() { return _relaxation_parameter; }
+  // FIXME: change to string to enum
+  /// Convergence criterion
+  std::string convergence_criterion = "residual";
+
+  /// Monitor convergence
+  bool report = true;
+
+  /// Throw error if solver fails to converge
+  bool error_on_nonconvergence = true;
+
+  /// Relaxation parameter
+  double relaxation_parameter = 1.0;
 
 protected:
   /// Convergence test. It may be overloaded using virtual inheritance and
   /// this base criterion may be called from derived, both in C++ and Python.
   ///
-  /// @param r (_la::PETScVector_)
+  /// @param r (_Vec_)
   ///         Residual for criterion evaluation.
   /// @param nonlinear_problem (_NonlinearProblem_)
   ///         The nonlinear problem.
@@ -120,37 +105,17 @@ protected:
   ///
   /// @returns  bool
   ///         Whether convergence occurred.
-  virtual bool converged(const la::PETScVector& r,
-                         const NonlinearProblem& nonlinear_problem,
+  virtual bool converged(const Vec r, const NonlinearProblem& nonlinear_problem,
                          std::size_t iteration);
-
-  /// Setup solver to be used with system matrix A and preconditioner
-  /// matrix P. It may be overloaded to get finer control over linear
-  /// solver setup, various linesearch tricks, etc. Note that minimal
-  /// implementation should call *set_operators* method of the linear
-  /// solver.
-  ///
-  /// @param A (_std::shared_ptr<const PETScMatrix>_)
-  ///         System Jacobian matrix.
-  /// @param J (_std::shared_ptr<const PETSccMatrix>_)
-  ///         System preconditioner matrix.
-  /// @param nonlinear_problem (_NonlinearProblem_)
-  ///         The nonlinear problem.
-  /// @param iteration (std::size_t)
-  ///         Newton iteration number.
-  virtual void solver_setup(std::shared_ptr<const la::PETScMatrix> A,
-                            std::shared_ptr<const la::PETScMatrix> P,
-                            const NonlinearProblem& nonlinear_problem,
-                            std::size_t iteration);
 
   /// Update solution vector by computed Newton step. Default
   /// update is given by formula::
   ///
   ///   x -= relaxation_parameter*dx
   ///
-  ///  @param x (_la::PETScVector>_)
+  ///  @param x (_Vec_)
   ///         The solution vector to be updated.
-  ///  @param dx (_la::PETScVector>_)
+  ///  @param dx (_Vec_)
   ///         The update vector computed by Newton step.
   ///  @param relaxation_parameter (double)
   ///         Newton relaxation parameter.
@@ -158,41 +123,25 @@ protected:
   ///         The nonlinear problem.
   ///  @param iteration (std::size_t)
   ///         Newton iteration number.
-  virtual void update_solution(la::PETScVector& x, const la::PETScVector& dx,
-                               double relaxation_parameter,
+  virtual void update_solution(Vec x, const Vec dx, double relaxation_parameter,
                                const NonlinearProblem& nonlinear_problem,
                                std::size_t iteration);
 
 private:
-  // Current number of Newton iterations
-  std::size_t _newton_iteration;
-
   // Accumulated number of Krylov iterations since solve began
-  std::size_t _krylov_iterations;
-
-  // Relaxation parameter
-  double _relaxation_parameter;
+  int _krylov_iterations;
 
   // Most recent residual and initial residual
   double _residual, _residual0;
 
   // Solver
-  std::shared_ptr<la::PETScKrylovSolver> _solver;
-
-  // Jacobian matrix
-  std::shared_ptr<la::PETScMatrix> _matA;
-
-  // Preconditioner matrix
-  std::shared_ptr<la::PETScMatrix> _matP;
+  la::PETScKrylovSolver _solver;
 
   // Solution vector
-  std::shared_ptr<la::PETScVector> _dx;
-
-  // Residual vector
-  std::shared_ptr<la::PETScVector> _b;
+  Vec _dx;
 
   // MPI communicator
   dolfin::MPI::Comm _mpi_comm;
 };
-}
-}
+} // namespace nls
+} // namespace dolfin

@@ -6,13 +6,13 @@
 
 #include "init.h"
 #include "SubSystemsManager.h"
-#include <dolfin/common/constants.h>
-#include <dolfin/log/log.h>
+#include <dolfin/common/log.h>
 
 //-----------------------------------------------------------------------------
 void dolfin::init(int argc, char* argv[])
 {
-  log::log(PROGRESS, "Initializing DOLFIN version %s.", DOLFIN_VERSION);
+  common::SubSystemsManager::init_logging(argc, argv);
+  LOG(INFO) << "Initializing DOLFIN version" << DOLFIN_VERSION;
   common::SubSystemsManager::init_petsc(argc, argv);
 }
 //-----------------------------------------------------------------------------

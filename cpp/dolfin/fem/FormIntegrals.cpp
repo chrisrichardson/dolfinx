@@ -5,248 +5,179 @@
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #include "FormIntegrals.h"
-#include <ufc.h>
+#include <cstdlib>
+#include <dolfin/common/types.h>
+#include <dolfin/mesh/Facet.h>
+#include <dolfin/mesh/MeshFunction.h>
+#include <dolfin/mesh/MeshIterator.h>
 
 using namespace dolfin;
 using namespace dolfin::fem;
 
 //-----------------------------------------------------------------------------
-FormIntegrals::FormIntegrals(const ufc_form& ufc_form)
+FormIntegrals::FormIntegrals()
 {
-  // Create cell integrals
-  ufc_cell_integral* _default_cell_integral
-      = ufc_form.create_default_cell_integral();
-  if (_default_cell_integral)
+  // Do nothing
+}
+//-----------------------------------------------------------------------------
+const std::function<void(PetscScalar*, const PetscScalar*, const double*,
+                         const int*, const int*)>&
+FormIntegrals::get_tabulate_tensor_function(FormIntegrals::Type type,
+                                            unsigned int i) const
+{
+  int type_index = static_cast<int>(type);
+  const std::vector<struct FormIntegrals::Integral>& integrals
+      = _integrals[type_index];
+
+  if (i > integrals.size())
+    throw std::runtime_error("Invalid integral index: " + std::to_string(i));
+
+  return integrals[i].tabulate;
+}
+//-----------------------------------------------------------------------------
+void FormIntegrals::register_tabulate_tensor(FormIntegrals::Type type, int i,
+                                             void (*fn)(PetscScalar*,
+                                                        const PetscScalar*,
+                                                        const double*,
+                                                        const int*, const int*))
+{
+  const int type_index = static_cast<int>(type);
+  std::vector<struct FormIntegrals::Integral>& integrals
+      = _integrals[type_index];
+
+  // Find insertion point
+  int pos = 0;
+  for (const auto& q : integrals)
   {
-    _cell_integrals.push_back(
-        std::shared_ptr<ufc_cell_integral>(_default_cell_integral));
+    if (q.id == i)
+    {
+      throw std::runtime_error("Integral with ID " + std::to_string(i)
+                               + " already exists");
+    }
+    else if (q.id > i)
+      break;
+    ++pos;
   }
 
-  const std::size_t num_cell_domains = ufc_form.max_cell_subdomain_id;
-  if (num_cell_domains > 0)
-  {
-    _cell_integrals.resize(num_cell_domains + 1);
+  // Create new Integral and insert
+  struct FormIntegrals::Integral new_integral
+      = {fn, i, std::vector<std::int32_t>()};
 
-    for (std::size_t i = 0; i < num_cell_domains; ++i)
+  integrals.insert(integrals.begin() + pos, new_integral);
+}
+//-----------------------------------------------------------------------------
+int FormIntegrals::num_integrals(FormIntegrals::Type type) const
+{
+  int type_index = static_cast<int>(type);
+  return _integrals[type_index].size();
+}
+//-----------------------------------------------------------------------------
+std::vector<int> FormIntegrals::integral_ids(FormIntegrals::Type type) const
+{
+  std::vector<int> ids;
+  int type_index = static_cast<int>(type);
+  for (auto& integral : _integrals[type_index])
+    ids.push_back(integral.id);
+
+  return ids;
+}
+//-----------------------------------------------------------------------------
+const std::vector<std::int32_t>&
+FormIntegrals::integral_domains(FormIntegrals::Type type, unsigned int i) const
+{
+  int type_index = static_cast<int>(type);
+  if (i >= _integrals[type_index].size())
+    throw std::runtime_error("Invalid integral:" + std::to_string(i));
+  return _integrals[type_index][i].active_entities;
+}
+//-----------------------------------------------------------------------------
+void FormIntegrals::set_domains(FormIntegrals::Type type,
+                                const mesh::MeshFunction<std::size_t>& marker)
+{
+  int type_index = static_cast<int>(type);
+  std::vector<struct FormIntegrals::Integral>& integrals
+      = _integrals[type_index];
+
+  if (integrals.size() == 0)
+    return;
+
+  std::shared_ptr<const mesh::Mesh> mesh = marker.mesh();
+
+  int tdim = mesh->topology().dim();
+  if (type == Type::exterior_facet or type == Type::interior_facet)
+    --tdim;
+  else if (type == Type::vertex)
+    tdim = 1;
+
+  if (tdim != marker.dim())
+  {
+    throw std::runtime_error("Invalid MeshFunction dimension:"
+                             + std::to_string(marker.dim()));
+  }
+
+  // Create a reverse map
+  std::map<int, int> id_to_integral;
+  for (unsigned int i = 0; i < integrals.size(); ++i)
+  {
+    if (integrals[i].id != -1)
     {
-      _cell_integrals[i + 1] = std::shared_ptr<ufc_cell_integral>(
-          ufc_form.create_cell_integral(i));
+      integrals[i].active_entities.clear();
+      id_to_integral[integrals[i].id] = i;
     }
   }
 
-  _enabled_coefficients.resize(_cell_integrals.size(),
-                               ufc_form.num_coefficients);
+  // Get reference to mesh function data array
+  Eigen::Ref<const Eigen::Array<std::size_t, Eigen::Dynamic, 1>> mf_values
+      = marker.values();
 
-  // Experimental function pointers for tabulate_tensor cell integral
-  for (unsigned int i = 0; i != _cell_integrals.size(); ++i)
+  for (Eigen::Index i = 0; i < mf_values.size(); ++i)
   {
-    const auto ci = _cell_integrals[i];
-    _cell_tabulate_tensor.push_back(ci->tabulate_tensor);
-    std::copy(ci->enabled_coefficients,
-              ci->enabled_coefficients + ufc_form.num_coefficients,
-              _enabled_coefficients.row(i).data());
+    auto it = id_to_integral.find(mf_values[i]);
+    if (it != id_to_integral.end())
+      integrals[it->second].active_entities.push_back(i);
+  }
+}
+//-----------------------------------------------------------------------------
+void FormIntegrals::set_default_domains(const mesh::Mesh& mesh)
+{
+  const int tdim = mesh.topology().dim();
+
+  std::vector<struct FormIntegrals::Integral>& cell_integrals
+      = _integrals[static_cast<int>(FormIntegrals::Type::cell)];
+
+  // If there is a default integral, define it on all cells
+  if (cell_integrals.size() > 0 and cell_integrals[0].id == -1)
+  {
+    cell_integrals[0].active_entities.resize(mesh.num_entities(tdim));
+    std::iota(cell_integrals[0].active_entities.begin(),
+              cell_integrals[0].active_entities.end(), 0);
   }
 
-  // Exterior facet integrals
-  ufc_exterior_facet_integral* _default_exterior_facet_integral
-      = ufc_form.create_default_exterior_facet_integral();
-  if (_default_exterior_facet_integral)
+  std::vector<struct FormIntegrals::Integral>& exf_integrals
+      = _integrals[static_cast<int>(FormIntegrals::Type::exterior_facet)];
+  if (exf_integrals.size() > 0 and exf_integrals[0].id == -1)
   {
-    _exterior_facet_integrals.push_back(
-        std::shared_ptr<ufc_exterior_facet_integral>(
-            _default_exterior_facet_integral));
-  }
-
-  const std::size_t num_exterior_facet_domains
-      = ufc_form.max_exterior_facet_subdomain_id;
-
-  if (num_exterior_facet_domains > 0)
-  {
-    _exterior_facet_integrals.resize(num_exterior_facet_domains + 1);
-
-    for (std::size_t i = 0; i < num_exterior_facet_domains; ++i)
+    // If there is a default integral, define it only on surface facets
+    exf_integrals[0].active_entities.clear();
+    for (const mesh::Facet& facet : mesh::MeshRange<mesh::Facet>(mesh))
     {
-      _exterior_facet_integrals[i + 1]
-          = std::shared_ptr<ufc_exterior_facet_integral>(
-              ufc_form.create_exterior_facet_integral(i));
+      if (facet.num_global_entities(tdim) == 1)
+        exf_integrals[0].active_entities.push_back(facet.index());
     }
   }
 
-  // Interior facet integrals
-  ufc_interior_facet_integral* _default_interior_facet_integral
-      = ufc_form.create_default_interior_facet_integral();
-  if (_default_interior_facet_integral)
+  std::vector<struct FormIntegrals::Integral>& inf_integrals
+      = _integrals[static_cast<int>(FormIntegrals::Type::interior_facet)];
+  if (inf_integrals.size() > 0 and inf_integrals[0].id == -1)
   {
-    _interior_facet_integrals.push_back(
-        std::shared_ptr<ufc_interior_facet_integral>(
-            _default_interior_facet_integral));
-  }
-
-  const std::size_t num_interior_facet_domains
-      = ufc_form.max_interior_facet_subdomain_id;
-
-  if (num_interior_facet_domains > 0)
-  {
-    _interior_facet_integrals.resize(num_interior_facet_domains + 1);
-    for (std::size_t i = 0; i < num_interior_facet_domains; ++i)
+    // If there is a default integral, define it only on interior facets
+    inf_integrals[0].active_entities.clear();
+    inf_integrals[0].active_entities.reserve(mesh.num_entities(tdim - 1));
+    for (const mesh::Facet& facet : mesh::MeshRange<mesh::Facet>(mesh))
     {
-      _interior_facet_integrals[i + 1]
-          = std::shared_ptr<ufc_interior_facet_integral>(
-              ufc_form.create_interior_facet_integral(i));
+      if (facet.num_global_entities(tdim) != 1)
+        inf_integrals[0].active_entities.push_back(facet.index());
     }
   }
-
-  // Vertex integrals
-  ufc_vertex_integral* _default_vertex_integral
-      = ufc_form.create_default_vertex_integral();
-  if (_default_vertex_integral)
-  {
-    _vertex_integrals.push_back(
-        std::shared_ptr<ufc_vertex_integral>(_default_vertex_integral));
-  }
-
-  const std::size_t num_vertex_domains = ufc_form.max_vertex_subdomain_id;
-
-  if (num_vertex_domains > 0)
-  {
-    _vertex_integrals.resize(num_vertex_domains + 1);
-    for (std::size_t i = 0; i < num_vertex_domains; ++i)
-    {
-      _vertex_integrals[i + 1] = std::shared_ptr<ufc_vertex_integral>(
-          ufc_form.create_vertex_integral(i));
-    }
-  }
-}
-//-----------------------------------------------------------------------------
-std::shared_ptr<const ufc_cell_integral> FormIntegrals::cell_integral() const
-{
-  if (_cell_integrals.empty())
-    return std::shared_ptr<const ufc_cell_integral>();
-  else
-    return _cell_integrals[0];
-}
-//-----------------------------------------------------------------------------
-std::shared_ptr<const ufc_cell_integral>
-FormIntegrals::cell_integral(unsigned int i) const
-{
-  if ((i + 1) >= _cell_integrals.size())
-    return std::shared_ptr<const ufc_cell_integral>();
-  else
-    return _cell_integrals[i + 1];
-}
-//-----------------------------------------------------------------------------
-const std::function<void(PetscScalar*, const PetscScalar* const*, const double*,
-                         int)>&
-FormIntegrals::cell_tabulate_tensor(int i) const
-{
-  return _cell_tabulate_tensor[i];
-}
-//-----------------------------------------------------------------------------
-const bool* FormIntegrals::cell_enabled_coefficients(int i) const
-{
-  return _enabled_coefficients.row(i).data();
-}
-//-----------------------------------------------------------------------------
-void FormIntegrals::set_cell_tabulate_tensor(
-    int i,
-    void (*fn)(PetscScalar*, const PetscScalar* const*, const double*, int))
-{
-  _cell_tabulate_tensor.resize(i + 1);
-  _cell_tabulate_tensor[i] = fn;
-
-  // Enable all coefficients for this integral
-  _enabled_coefficients.conservativeResize(i + 1, Eigen::NoChange);
-  _enabled_coefficients.row(i) = true;
-}
-//-----------------------------------------------------------------------------
-int FormIntegrals::count(FormIntegrals::Type t) const
-{
-  switch (t)
-  {
-  case Type::cell:
-    return _cell_tabulate_tensor.size();
-  case Type::interior_facet:
-    return _interior_facet_integrals.size();
-  case Type::exterior_facet:
-    return _exterior_facet_integrals.size();
-  case Type::vertex:
-    return _vertex_integrals.size();
-  }
-
-  return 0;
-}
-//-----------------------------------------------------------------------------
-int FormIntegrals::num_cell_integrals() const
-{
-  return _cell_tabulate_tensor.size();
-}
-//-----------------------------------------------------------------------------
-std::shared_ptr<const ufc_exterior_facet_integral>
-FormIntegrals::exterior_facet_integral() const
-{
-  if (_exterior_facet_integrals.empty())
-    return std::shared_ptr<const ufc_exterior_facet_integral>();
-  else
-    return _exterior_facet_integrals[0];
-}
-//-----------------------------------------------------------------------------
-std::shared_ptr<const ufc_exterior_facet_integral>
-FormIntegrals::exterior_facet_integral(unsigned int i) const
-{
-  if (i + 1 >= _exterior_facet_integrals.size())
-    return std::shared_ptr<const ufc_exterior_facet_integral>();
-  else
-    return _exterior_facet_integrals[i + 1];
-}
-//-----------------------------------------------------------------------------
-int FormIntegrals::num_exterior_facet_integrals() const
-{
-  return _exterior_facet_integrals.size();
-}
-//-----------------------------------------------------------------------------
-std::shared_ptr<const ufc_interior_facet_integral>
-FormIntegrals::interior_facet_integral() const
-{
-  if (_interior_facet_integrals.empty())
-    return std::shared_ptr<const ufc_interior_facet_integral>();
-  else
-    return _interior_facet_integrals[0];
-}
-//-----------------------------------------------------------------------------
-std::shared_ptr<const ufc_interior_facet_integral>
-FormIntegrals::interior_facet_integral(unsigned int i) const
-{
-  if (i + 1 >= _interior_facet_integrals.size())
-    return std::shared_ptr<const ufc_interior_facet_integral>();
-  else
-    return _interior_facet_integrals[i + 1];
-}
-//-----------------------------------------------------------------------------
-int FormIntegrals::num_interior_facet_integrals() const
-{
-  return _interior_facet_integrals.size();
-}
-//-----------------------------------------------------------------------------
-std::shared_ptr<const ufc_vertex_integral>
-FormIntegrals::vertex_integral() const
-{
-  if (_vertex_integrals.empty())
-    return std::shared_ptr<const ufc_vertex_integral>();
-  else
-    return _vertex_integrals[0];
-}
-//-----------------------------------------------------------------------------
-std::shared_ptr<const ufc_vertex_integral>
-FormIntegrals::vertex_integral(unsigned int i) const
-{
-  if (i + 1 >= _vertex_integrals.size())
-    return std::shared_ptr<const ufc_vertex_integral>();
-  else
-    return _vertex_integrals[i + 1];
-}
-//-----------------------------------------------------------------------------
-int FormIntegrals::num_vertex_integrals() const
-{
-  return _vertex_integrals.size();
 }
 //-----------------------------------------------------------------------------

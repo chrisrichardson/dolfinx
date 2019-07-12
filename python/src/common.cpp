@@ -1,19 +1,18 @@
-// Copyright (C) 2017 Chris Richardson and Garth N. Wells
+// Copyright (C) 2017-2019 Chris Richardson and Garth N. Wells
 //
 // This file is part of DOLFIN (https://www.fenicsproject.org)
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #include <Eigen/Dense>
+#include <complex>
 #include <dolfin/common/IndexMap.h>
 #include <dolfin/common/MPI.h>
 #include <dolfin/common/SubSystemsManager.h>
+#include <dolfin/common/Table.h>
 #include <dolfin/common/Timer.h>
-#include <dolfin/common/Variable.h>
-#include <dolfin/common/constants.h>
 #include <dolfin/common/defines.h>
 #include <dolfin/common/timing.h>
-#include <dolfin/log/Table.h>
 #include <memory>
 #include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
@@ -32,74 +31,44 @@ namespace dolfin_wrappers
 // Interface for dolfin/common
 void common(py::module& m)
 {
-  // dolfin::common::Variable
-  py::class_<dolfin::common::Variable,
-             std::shared_ptr<dolfin::common::Variable>>(m, "Variable",
-                                                        "Variable base class")
-      .def("id", &dolfin::common::Variable::id)
-      .def("name", &dolfin::common::Variable::name)
-      .def("rename", &dolfin::common::Variable::rename)
-      .def_readwrite("parameters", &dolfin::common::Variable::parameters);
-
   // From dolfin/common/defines.h
-  m.def("has_debug", &dolfin::has_debug);
-  m.def("has_hdf5", &dolfin::has_hdf5);
-  m.def("has_hdf5_parallel", &dolfin::has_hdf5_parallel);
-  m.def("has_mpi4py",
-        []() {
-#ifdef HAS_PYBIND11_MPI4PY
-          return true;
-#else
-          return false;
-#endif
-        },
-        "Return `True` if DOLFIN is configured with mpi4py");
-  m.def("has_parmetis", &dolfin::has_parmetis);
-  m.def("has_scotch", &dolfin::has_scotch);
-  m.def("has_petsc_complex", &dolfin::has_petsc_complex,
-        "Return True if PETSc scalar is complex.");
-  m.def("has_slepc", &dolfin::has_slepc,
-        "Return `True` if DOLFIN is configured with SLEPc");
-  m.def("has_petsc4py",
-        []() {
-#ifdef HAS_PYBIND11_PETSC4PY
-          return true;
-#else
-          return false;
-#endif
-        },
-        "Return `True` if DOLFIN is configured with petsc4py");
-  m.def("has_slepc4py",
-        []() {
+  m.attr("has_debug") = dolfin::has_debug();
+  m.attr("has_parmetis") = dolfin::has_parmetis();
+  m.attr("has_petsc_complex") = dolfin::has_petsc_complex();
+  m.attr("has_slepc") = dolfin::has_slepc();
 #ifdef HAS_PYBIND11_SLEPC4PY
-          return true;
+  m.attr("has_slepc4py") = true;
 #else
-          return false;
+  m.attr("has_slepc4py") = false;
 #endif
-        },
-        "Return `True` if DOLFIN is configured with slepc4py");
-  m.def("git_commit_hash", &dolfin::git_commit_hash,
-        "Returns git hash for this build.");
-
-  m.attr("DOLFIN_EPS") = DOLFIN_EPS;
-  m.attr("DOLFIN_PI") = DOLFIN_PI;
+  m.attr("git_commit_hash") = dolfin::git_commit_hash();
 
   // dolfin::common::IndexMap
   py::class_<dolfin::common::IndexMap,
              std::shared_ptr<dolfin::common::IndexMap>>(m, "IndexMap")
-      .def("size_local", &dolfin::common::IndexMap::size_local)
-      .def("size_global", &dolfin::common::IndexMap::size_global)
-      .def("num_ghosts", &dolfin::common::IndexMap::num_ghosts)
-      .def("block_size", &dolfin::common::IndexMap::block_size,
-           "Return block size")
-      .def("local_range", &dolfin::common::IndexMap::local_range,
-           "Range of indices owned by this map")
-      .def("ghost_owners", &dolfin::common::IndexMap::ghost_owners,
-           py::return_value_policy::reference_internal,
-           "Return owning process for each ghost index")
-      .def("ghosts", &dolfin::common::IndexMap::ghosts,
-           py::return_value_policy::reference_internal,
-           "Return list of ghost indices");
+      .def_property_readonly("size_local",
+                             &dolfin::common::IndexMap::size_local)
+      .def_property_readonly("size_global",
+                             &dolfin::common::IndexMap::size_global)
+      .def_property_readonly("num_ghosts",
+                             &dolfin::common::IndexMap::num_ghosts)
+      .def_readonly("block_size", &dolfin::common::IndexMap::block_size,
+                    "Return block size")
+      .def_property_readonly("local_range",
+                             &dolfin::common::IndexMap::local_range,
+                             "Range of indices owned by this map")
+      .def_property_readonly("ghost_owners",
+                             &dolfin::common::IndexMap::ghost_owners,
+                             py::return_value_policy::reference_internal,
+                             "Return owning process for each ghost index")
+      .def_property_readonly("ghosts", &dolfin::common::IndexMap::ghosts,
+                             py::return_value_policy::reference_internal,
+                             "Return list of ghost indices");
+
+  // dolfin::Table
+  py::class_<dolfin::Table, std::shared_ptr<dolfin::Table>>(m, "Table")
+      .def(py::init<std::string>())
+      .def("str", &dolfin::Table::str);
 
   // dolfin::common::Timer
   py::class_<dolfin::common::Timer, std::shared_ptr<dolfin::common::Timer>>(
@@ -142,6 +111,14 @@ void common(py::module& m)
                     dolfin::common::SubSystemsManager::init_petsc(args.size(),
                                                                   argv.data());
                   })
+      .def_static("init_logging",
+                  [](std::vector<std::string> args) {
+                    std::vector<char*> argv(args.size() + 1, nullptr);
+                    for (std::size_t i = 0; i < args.size(); ++i)
+                      argv[i] = const_cast<char*>(args[i].data());
+                    dolfin::common::SubSystemsManager::init_logging(
+                        args.size(), argv.data());
+                  })
       .def_static("finalize", &dolfin::common::SubSystemsManager::finalize)
       .def_static("responsible_mpi",
                   &dolfin::common::SubSystemsManager::responsible_mpi)
@@ -151,7 +128,7 @@ void common(py::module& m)
                   &dolfin::common::SubSystemsManager::mpi_initialized)
       .def_static("mpi_finalized",
                   &dolfin::common::SubSystemsManager::mpi_finalized);
-}
+} // namespace dolfin_wrappers
 
 // Interface for MPI
 void mpi(py::module& m)
@@ -231,6 +208,10 @@ void mpi(py::module& m)
                   })
       .def_static("sum",
                   [](const MPICommWrapper comm, double value) {
+                    return dolfin::MPI::sum(comm.get(), value);
+                  })
+      .def_static("sum",
+                  [](const MPICommWrapper comm, std::complex<double> value) {
                     return dolfin::MPI::sum(comm.get(), value);
                   })
       // templated for dolfin::Table

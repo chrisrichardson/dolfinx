@@ -12,7 +12,7 @@ import os
 import sys
 import shutil
 shutil.rmtree("demos", True)
-shutil.copytree("../../demo/documented", "demos")
+shutil.copytree("../../demo", "demos")
 
 #import rstprocess
 #rstprocess.process()
@@ -170,7 +170,7 @@ texinfo_documents = [
 
 autodoc_default_flags = ['members', 'show-inheritance']
 autosummary_generate = True
-autoclass_content = "init"
+autoclass_content = "both"
 
 napoleon_google_docstring = False
 napoleon_use_admonition_for_notes = False

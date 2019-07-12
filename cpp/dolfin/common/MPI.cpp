@@ -17,7 +17,10 @@ dolfin::MPI::Comm::Comm(MPI_Comm comm)
   {
     int err = MPI_Comm_dup(comm, &_comm);
     if (err != MPI_SUCCESS)
-      log::error("Duplication of MPI communicator failed (MPI_Comm_dup");
+    {
+      throw std::runtime_error(
+          "Duplication of MPI communicator failed (MPI_Comm_dup)");
+    }
   }
   else
     _comm = MPI_COMM_NULL;
@@ -63,10 +66,7 @@ std::uint32_t dolfin::MPI::Comm::size() const
   return size;
 }
 //-----------------------------------------------------------------------------
-void dolfin::MPI::Comm::barrier() const
-{
-  MPI_Barrier(_comm);
-}
+void dolfin::MPI::Comm::barrier() const { MPI_Barrier(_comm); }
 //-----------------------------------------------------------------------------
 void dolfin::MPI::Comm::reset(MPI_Comm comm)
 {
@@ -112,10 +112,7 @@ std::uint32_t dolfin::MPI::size(const MPI_Comm comm)
   return size;
 }
 //-----------------------------------------------------------------------------
-void dolfin::MPI::barrier(const MPI_Comm comm)
-{
-  MPI_Barrier(comm);
-}
+void dolfin::MPI::barrier(const MPI_Comm comm) { MPI_Barrier(comm); }
 //-----------------------------------------------------------------------------
 std::size_t dolfin::MPI::global_offset(const MPI_Comm comm, std::size_t range,
                                        bool exclusive)
@@ -183,13 +180,13 @@ dolfin::Table dolfin::MPI::all_reduce(const MPI_Comm comm,
                                       const dolfin::Table& table,
                                       const MPI_Op op)
 {
-  const std::string new_title = "[" + operation_map[op] + "] " + table.name();
+  const std::string new_title = "[" + operation_map[op] + "] " + table.name;
 
   // Handle trivial reduction
   if (MPI::size(comm) == 1)
   {
     Table table_all(table);
-    table_all.rename(new_title);
+    table_all.name = new_title;
     return table_all;
   }
 

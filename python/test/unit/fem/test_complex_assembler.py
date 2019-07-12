@@ -7,13 +7,15 @@
 
 import numpy as np
 import pytest
+from petsc4py import PETSc
 
 import dolfin
 import ufl
+from dolfin.function.specialfunctions import SpatialCoordinate
 from ufl import dx, grad, inner
 
 pytestmark = pytest.mark.skipif(
-    not dolfin.has_petsc_complex(), reason="Only works in complex mode.")
+    not dolfin.has_petsc_complex, reason="Only works in complex mode.")
 
 
 def test_complex_assembly():
@@ -26,30 +28,45 @@ def test_complex_assembly():
     u = dolfin.function.argument.TrialFunction(V)
     v = dolfin.function.argument.TestFunction(V)
 
-    g = dolfin.function.constant.Constant(-2 + 3.0j)
-    j = dolfin.function.constant.Constant(1.0j)
+    g = -2 + 3.0j
+    j = 1.0j
 
     a_real = inner(u, v) * dx
     L1 = inner(g, v) * dx
 
-    bnorm = dolfin.fem.assemble(L1).norm(dolfin.cpp.la.Norm.l1)
+    b = dolfin.fem.assemble_vector(L1)
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    bnorm = b.norm(PETSc.NormType.N1)
     b_norm_ref = abs(-2 + 3.0j)
     assert np.isclose(bnorm, b_norm_ref)
-    A0_norm = dolfin.fem.assemble(a_real).norm(dolfin.cpp.la.Norm.frobenius)
+
+    A = dolfin.fem.assemble_matrix(a_real)
+    A.assemble()
+    A0_norm = A.norm(PETSc.NormType.FROBENIUS)
+
+    x = SpatialCoordinate(mesh)
 
     a_imag = j * inner(u, v) * dx
-    f = dolfin.Expression("j*sin(2*pi*x[0])", degree=2)
+    f = 1j * ufl.sin(2 * np.pi * x[0])
     L0 = inner(f, v) * dx
-    A1_norm = dolfin.fem.assemble(a_imag).norm(dolfin.cpp.la.Norm.frobenius)
+    A = dolfin.fem.assemble_matrix(a_imag)
+    A.assemble()
+    A1_norm = A.norm(PETSc.NormType.FROBENIUS)
     assert np.isclose(A0_norm, A1_norm)
-    b1_norm = dolfin.fem.assemble(L0).norm(dolfin.cpp.la.Norm.l2)
+    b = dolfin.fem.assemble_vector(L0)
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    b1_norm = b.norm(PETSc.NormType.N2)
 
     a_complex = (1 + j) * inner(u, v) * dx
-    f = dolfin.Expression("sin(2*pi*x[0])", degree=2)
+    f = ufl.sin(2 * np.pi * x[0])
     L2 = inner(f, v) * dx
-    A2_norm = dolfin.fem.assemble(a_complex).norm(dolfin.cpp.la.Norm.frobenius)
+    A = dolfin.fem.assemble_matrix(a_complex)
+    A.assemble()
+    A2_norm = A.norm(PETSc.NormType.FROBENIUS)
     assert np.isclose(A1_norm, A2_norm / np.sqrt(2))
-    b2_norm = dolfin.fem.assemble(L2).norm(dolfin.cpp.la.Norm.l2)
+    b = dolfin.fem.assemble_vector(L2)
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    b2_norm = b.norm(PETSc.NormType.N2)
     assert np.isclose(b2_norm, b1_norm)
 
 
@@ -64,35 +81,39 @@ def test_complex_assembly_solve():
     P = ufl.FiniteElement("Lagrange", mesh.ufl_cell(), degree)
     V = dolfin.function.functionspace.FunctionSpace(mesh, P)
 
+    x = SpatialCoordinate(mesh)
+
     # Define source term
     A = 1 + 2 * (2 * np.pi)**2
-    f = dolfin.Expression(
-        "(1.+j)*A*cos(2*pi*x[0])*cos(2*pi*x[1])", degree=degree, A=A)
+    f = (1. + 1j) * A * ufl.cos(2 * np.pi * x[0]) * ufl.cos(2 * np.pi * x[1])
 
     # Variational problem
     u = dolfin.function.argument.TrialFunction(V)
     v = dolfin.function.argument.TestFunction(V)
-    C = dolfin.function.constant.Constant(1 + 1j)
+    C = 1 + 1j
     a = C * inner(grad(u), grad(v)) * dx + C * inner(u, v) * dx
     L = inner(f, v) * dx
 
     # Assemble
-    A = dolfin.fem.assemble(a)
-    b = dolfin.fem.assemble(L)
+    A = dolfin.fem.assemble_matrix(a)
+    A.assemble()
+    b = dolfin.fem.assemble_vector(L)
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
 
     # Create solver
     solver = dolfin.cpp.la.PETScKrylovSolver(mesh.mpi_comm())
     dolfin.cpp.la.PETScOptions.set("ksp_type", "preonly")
     dolfin.cpp.la.PETScOptions.set("pc_type", "lu")
     solver.set_from_options()
-    x = dolfin.cpp.la.PETScVector()
+    x = A.createVecRight()
     solver.set_operator(A)
     solver.solve(x, b)
 
     # Reference Solution
-    ex = dolfin.Expression("cos(2*pi*x[0])*cos(2*pi*x[1])", degree=degree)
-    u_ref = dolfin.interpolate(ex, V)
+    def ref_eval(values, x):
+        values[:, 0] = np.cos(2 * np.pi * x[:, 0]) * np.cos(2 * np.pi * x[:, 1])
+    u_ref = dolfin.interpolate(ref_eval, V)
 
-    xnorm = x.norm(dolfin.cpp.la.Norm.l2)
-    x_ref_norm = u_ref.vector().norm(dolfin.cpp.la.Norm.l2)
+    xnorm = x.norm(PETSc.NormType.N2)
+    x_ref_norm = u_ref.vector().norm(PETSc.NormType.N2)
     assert np.isclose(xnorm, x_ref_norm)

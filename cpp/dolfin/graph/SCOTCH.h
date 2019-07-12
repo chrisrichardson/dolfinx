@@ -7,22 +7,20 @@
 #pragma once
 
 #include "Graph.h"
-#include <cstddef>
 #include <cstdint>
 #include <dolfin/common/MPI.h>
-#include <dolfin/common/types.h>
 #include <map>
-#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
-#ifdef HAS_SCOTCH
+// Developer note: ptscotch.h is not part of the public interface,
+// therefore this header (SCOTCH.h) should not be placed in the public
+// interface of DOLFIN
 extern "C"
 {
 #include <ptscotch.h>
 }
-#endif
-
 
 namespace dolfin
 {

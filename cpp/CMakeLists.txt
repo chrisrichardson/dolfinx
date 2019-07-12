@@ -1,6 +1,5 @@
 # Top level CMakeLists.txt file for DOLFIN
-
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.10)
 
 #------------------------------------------------------------------------------
 # Set project name and version number
@@ -13,6 +12,17 @@ set(DOLFIN_VERSION_MICRO "0")
 set(DOLFIN_VERSION "${DOLFIN_VERSION_MAJOR}.${DOLFIN_VERSION_MINOR}.${DOLFIN_VERSION_MICRO}")
 if (NOT DOLFIN_VERSION_RELEASE)
   set(DOLFIN_VERSION "${DOLFIN_VERSION}.dev0")
+endif()
+
+#------------------------------------------------------------------------------
+# Set CMake options, see `cmake --help-policy CMP000x`
+
+cmake_policy(VERSION 3.10)
+if (POLICY CMP0074)
+  cmake_policy(SET CMP0074 NEW)
+endif()
+if (POLICY CMP0075)
+  cmake_policy(SET CMP0075 NEW)
 endif()
 
 #------------------------------------------------------------------------------
@@ -45,13 +55,6 @@ endif()
 #------------------------------------------------------------------------------
 # General configuration
 
-# Set CMake options, see `cmake --help-policy CMP000x`
-if (COMMAND cmake_policy)
-  cmake_policy(SET CMP0003 NEW)
-  cmake_policy(SET CMP0004 NEW)
-  cmake_policy(SET CMP0042 NEW)
-endif()
-
 # Set location of our FindFoo.cmake modules
 set(DOLFIN_CMAKE_DIR "${DOLFIN_SOURCE_DIR}/cmake" CACHE INTERNAL "")
 set(CMAKE_MODULE_PATH "${DOLFIN_CMAKE_DIR}/modules")
@@ -66,34 +69,17 @@ include(FeatureSummary)
 
 option(BUILD_SHARED_LIBS "Build DOLFIN with shared libraries." ON)
 option(CMAKE_USE_RELATIVE_PATHS "Use relative paths in makefiles and projects." OFF)
-#option(DOLFIN_ENABLE_CODE_COVERAGE "Enable code coverage." OFF)
 option(DOLFIN_SKIP_BUILD_TESTS "Skip build tests for testing usability of dependency packages." OFF)
 option(DOLFIN_WITH_LIBRARY_VERSION "Build with library version information." ON)
-#option(DOLFIN_ENABLE_GEOMETRY_DEBUGGING "Enable geometry debugging (developers only; requires libcgal-dev and libcgal-qt5-dev)." OFF)
 
 add_feature_info(BUILD_SHARED_LIBS BUILD_SHARED_LIBS "Build DOLFIN with shared libraries.")
 add_feature_info(CMAKE_USE_RELATIVE_PATHS CMAKE_USE_RELATIVE_PATHS "Use relative paths in makefiles and projects.")
-#add_feature_info(DOLFIN_ENABLE_CODE_COVERAGE DOLFIN_ENABLE_CODE_COVERAGE "Enable code coverage.")
 add_feature_info(DOLFIN_WITH_LIBRARY_VERSION DOLFIN_WITH_LIBRARY_VERSION "Build with library version information.")
 add_feature_info(DOLFIN_SKIP_BUILD_TESTS DOLFIN_SKIP_BUILD_TESTS "Skip build tests for testing usability of dependency packages.")
-#add_feature_info(DOLFIN_ENABLE_GEOMETRY_DEBUGGING DOLFIN_ENABLE_GEOMETRY_DEBUGGING "Enable geometry debugging.")
 
 # Add shared library paths so shared libs in non-system paths are found
 option(CMAKE_INSTALL_RPATH_USE_LINK_PATH "Add paths to linker search and installed rpath." ON)
 add_feature_info(CMAKE_INSTALL_RPATH_USE_LINK_PATH CMAKE_INSTALL_RPATH_USE_LINK_PATH "Add paths to linker search and installed rpath.")
-
-# Hande RPATH on OSX when not installing to a system directory, see
-# https://groups.google.com/d/msg/fenics-dev/KSCrob4M_1M/zsJwdN-SCAAJ
-# and https://cmake.org/Wiki/CMake_RPATH_handling#Always_full_RPATH.
-if (APPLE)
-  # The RPATH to be used when installing, but only if it's not a
-  # system directory
-  SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-  LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
-  IF("${isSystemDir}" STREQUAL "-1")
-     SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-  ENDIF("${isSystemDir}" STREQUAL "-1")
-endif()
 
 #------------------------------------------------------------------------------
 # Enable or disable optional packages
@@ -101,9 +87,7 @@ endif()
 # List optional packages
 set(OPTIONAL_PACKAGES "")
 list(APPEND OPTIONAL_PACKAGES "SLEPc")
-list(APPEND OPTIONAL_PACKAGES "SCOTCH")
 list(APPEND OPTIONAL_PACKAGES "ParMETIS")
-list(APPEND OPTIONAL_PACKAGES "HDF5")
 
 # Add options
 foreach (OPTIONAL_PACKAGE ${OPTIONAL_PACKAGES})
@@ -160,12 +144,6 @@ endif()
 set(CMAKE_CXX_FLAGS_DEVELOPER "${DOLFIN_CXX_DEVELOPER_FLAGS}" CACHE STRING
   "Flags used by the compiler during development." FORCE)
 
-# Add flags for generating code coverage reports
-#if (DOLFIN_ENABLE_CODE_COVERAGE AND CMAKE_COMPILER_IS_GNUCXX)
-#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
-#  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-#endif()
-
 #------------------------------------------------------------------------------
 # Run tests to find required packages
 
@@ -209,31 +187,47 @@ set_package_properties(Eigen3 PROPERTIES TYPE REQUIRED
   DESCRIPTION "Lightweight C++ template library for linear algebra"
   URL "http://eigen.tuxfamily.org")
 
-find_package(PETSc 3.7)
+find_package(PETSc 3.10)
 set_package_properties(PETSc PROPERTIES TYPE REQUIRED
   DESCRIPTION "Portable, Extensible Toolkit for Scientific Computation (PETSc)"
   URL "https://www.mcs.anl.gov/petsc/"
   PURPOSE "PETSc linear algebra backend")
 
-#------------------------------------------------------------------------------
-# Run tests to find optional packages
-
 # Check for required package UFC
 find_package(UFC MODULE ${DOLFIN_VERSION_MAJOR}.${DOLFIN_VERSION_MINOR})
 set_package_properties(UFC PROPERTIES TYPE REQUIRED
-  DESCRIPTION "Unified language for form-compilers (part of FFC)"
-  URL "https://bitbucket.org/fenics-project/ffc")
+  DESCRIPTION "Unified language for form-compilers (part of FFC-X)"
+  URL "https://github.com/fenics/ffcx")
 
-# Check for PETSc and SLEPc
+# Check for HDF5
+set(HDF5_PREFER_PARALLEL TRUE)
+find_package(HDF5 REQUIRED)
+if (NOT HDF5_IS_PARALLEL)
+  message(FATAL_ERROR "Found serial HDF5 build, MPI HDF5 build required, try setting HDF5_DIR")
+endif()
+set_package_properties(HDF5 PROPERTIES TYPE REQUIRED
+  DESCRIPTION "Hierarchical Data Format 5 (HDF5)"
+  URL "https://www.hdfgroup.org/HDF5")
+
+find_package(SCOTCH REQUIRED)
+set_package_properties(SCOTCH PROPERTIES TYPE REQUIRED
+  DESCRIPTION "Programs and libraries for graph, mesh and hypergraph partitioning"
+  URL "https://www.labri.fr/perso/pelegrin/scotch"
+  PURPOSE "Enables parallel graph partitioning")
+
+#------------------------------------------------------------------------------
+# Run tests to find optional packages
+
+# Check for SLEPc
 set(SLEPC_FOUND FALSE)
 if (DOLFIN_ENABLE_SLEPC)
-  find_package(SLEPc 3.7)
+  find_package(SLEPc 3.10)
   set_package_properties(SLEPc PROPERTIES TYPE OPTIONAL
     DESCRIPTION "Scalable Library for Eigenvalue Problem Computations"
     URL "http://slepc.upv.es/")
 endif()
 
-# Check for ParMETIS and SCOTCH
+# Check for ParMETIS
 if (DOLFIN_ENABLE_PARMETIS)
   find_package(ParMETIS 4.0.2)
   set_package_properties(ParMETIS PROPERTIES TYPE OPTIONAL
@@ -242,58 +236,10 @@ if (DOLFIN_ENABLE_PARMETIS)
     PURPOSE "Enables parallel graph partitioning")
 endif()
 
-if (DOLFIN_ENABLE_SCOTCH)
-  find_package(SCOTCH)
-  set_package_properties(SCOTCH PROPERTIES TYPE OPTIONAL
-    DESCRIPTION "Programs and libraries for graph, mesh and hypergraph partitioning"
-    URL "https://www.labri.fr/perso/pelegrin/scotch"
-    PURPOSE "Enables parallel graph partitioning")
-endif()
-
-# Check for HDF5
-if (DOLFIN_ENABLE_HDF5)
-  if (NOT DEFINED ENV{HDF5_ROOT})
-    set(ENV{HDF5_ROOT} "$ENV{HDF5_DIR}")
-  endif()
-  set(HDF5_PREFER_PARALLEL TRUE)
-  find_package(HDF5 COMPONENTS C)
-  if (NOT HDF5_IS_PARALLEL)
-      set(HDF5_FOUND FALSE)
-      message(STATUS "Found serial HDF5 build, MPI HDF5 build required, try setting HDF5_DIR")
-  endif()
-  set_package_properties(HDF5 PROPERTIES TYPE OPTIONAL
-    DESCRIPTION "Hierarchical Data Format 5 (HDF5)"
-    URL "https://www.hdfgroup.org/HDF5")
-endif()
-
-# Check for geometry debugging
-if (DOLFIN_ENABLE_GEOMETRY_DEBUGGING)
-  message(STATUS "Enabling geometry debugging")
-  find_package(CGAL REQUIRED)
-  find_package(GMP REQUIRED)
-  find_package(MPFR REQUIRED)
-  if (NOT CGAL_FOUND)
-    message(FATAL_ERROR "Unable to find package CGAL required for DOLFIN_ENABLE_GEOMETRY_DEBUGGING")
-  endif()
-  if (NOT GMP_FOUND)
-    message(FATAL_ERROR "Unable to find package GMP required for DOLFIN_ENABLE_GEOMETRY_DEBUGGING")
-  endif()
-  if (NOT MPFR_FOUND)
-    message(FATAL_ERROR "Unable to find package MPFR required for DOLFIN_ENABLE_GEOMETRY_DEBUGGING")
-  endif()
-endif()
-
 #------------------------------------------------------------------------------
 # Print summary of found and not found optional packages
 
 feature_summary(WHAT ALL)
-
-#------------------------------------------------------------------------------
-# Installation of docstrings
-
-#install(DIRECTORY ${CMAKE_SOURCE_DIR}/site-packages/dolfin/docstrings
-#        DESTINATION ${DOLFIN_INSTALL_PYTHON_MODULE_DIR}/dolfin
-#        USE_SOURCE_PERMISSIONS)
 
 #------------------------------------------------------------------------------
 # Installation of DOLFIN library
@@ -311,7 +257,6 @@ endif()
 
 # Set DOLFIN install sub-directories
 include(GNUInstallDirs)
-# set(DOLFIN_BIN_DIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH "Binary installation directory.")
 set(DOLFIN_LIB_DIR "${CMAKE_INSTALL_LIBDIR}" CACHE PATH "Library installation directory.")
 set(DOLFIN_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}" CACHE PATH "C/C++ header installation directory.")
 set(DOLFIN_PKGCONFIG_DIR "${CMAKE_INSTALL_LIBDIR}/pkgconfig" CACHE PATH "pkg-config file installation directory.")
@@ -339,36 +284,17 @@ install(FILES ${CMAKE_BINARY_DIR}/dolfin.conf
         COMPONENT Development)
 
 #------------------------------------------------------------------------------
-# Generate demo files from rst
-
-find_package(PythonInterp 3)
-
-if (PYTHONINTERP_FOUND)
-  message(STATUS "")
-  message(STATUS "Generating demo source files from reStructuredText")
-  message(STATUS "--------------------------------------------------")
-  file(GLOB_RECURSE demo_rst_files "demo/*.py.rst" "demo/*.cpp.rst" "demo/*.ufl.rst")
-  foreach(rst_file ${demo_rst_files})
-    execute_process(COMMAND ${PYTHON_EXECUTABLE} "-B" "-u" ../utils/pylit/pylit.py ${rst_file}
-      WORKING_DIRECTORY ${DOLFIN_SOURCE_DIR})
-    #add_custom_command(TARGET demos_source PRE_BUILD
-    #  COMMAND ${PYTHON_EXECUTABLE} "-B" "-u" ../utils/pylit/pylit.py ${rst_file}
-    #  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-  endforeach()
-endif()
-
-#------------------------------------------------------------------------------
 # Generate form files for tests and demos and DOLFIN if not exists
 # FIXME: Generate files in Build directory instead, at least for demo
 # and tests
 
 set(COPY_DEMO_TEST_DEMO_DATA FALSE)
-if (PYTHONINTERP_FOUND AND NOT EXISTS ${DOLFIN_SOURCE_DIR}/demo/documented/poisson/Poisson.h)
+if (PYTHONINTERP_FOUND AND NOT EXISTS ${DOLFIN_SOURCE_DIR}/demo/poisson/Poisson.h)
   message(STATUS "")
   message(STATUS "Generating form files in demo and test and directories. May take some time...")
   message(STATUS "----------------------------------------------------------------------------------------")
   execute_process(
-    COMMAND ${PYTHON_EXECUTABLE} "-B" "-u" ${DOLFIN_SOURCE_DIR}/cmake/scripts/generate-form-files.py
+    COMMAND ${PYTHON_EXECUTABLE} "-B" "-u" ${DOLFIN_SOURCE_DIR}/cmake/scripts/generate-form-files.py ${PETSC_SCALAR_COMPLEX}
     WORKING_DIRECTORY ${DOLFIN_SOURCE_DIR}
     RESULT_VARIABLE FORM_GENERATION_RESULT
     OUTPUT_VARIABLE FORM_GENERATION_OUTPUT
@@ -377,8 +303,8 @@ if (PYTHONINTERP_FOUND AND NOT EXISTS ${DOLFIN_SOURCE_DIR}/demo/documented/poiss
 
   if (FORM_GENERATION_RESULT)
     # Cleanup so download is triggered next time we run cmake
-    if (EXISTS ${DOLFIN_SOURCE_DIR}/demo/documented/poisson/Poisson.h)
-      file(REMOVE ${DOLFIN_SOURCE_DIR}/demo/documented/poisson/Poisson.h)
+    if (EXISTS ${DOLFIN_SOURCE_DIR}/demo/poisson/Poisson.h)
+      file(REMOVE ${DOLFIN_SOURCE_DIR}/demo/poisson/Poisson.h)
     endif()
     message(FATAL_ERROR "Generation of form files failed: \n${FORM_GENERATION_OUTPUT}")
   endif()
@@ -391,7 +317,7 @@ endif()
 # FIXME: Generate files in Build directory instead?
 # NOTE: We need to call this script after generate-formfiles
 
-if (PYTHONINTERP_FOUND AND NOT EXISTS ${DOLFIN_SOURCE_DIR}/demo/documented/poisson/CMakeLists.txt)
+if (PYTHONINTERP_FOUND AND NOT EXISTS ${DOLFIN_SOURCE_DIR}/demo/poisson/CMakeLists.txt)
   message(STATUS "")
   message(STATUS "Generating CMakeLists.txt files in demo and test directories")
   message(STATUS "-------------------------------------------------------------------")
@@ -405,8 +331,8 @@ if (PYTHONINTERP_FOUND AND NOT EXISTS ${DOLFIN_SOURCE_DIR}/demo/documented/poiss
   if (CMAKE_GENERATION_RESULT)
 
     # Cleanup so FFC rebuild is triggered next time we run cmake
-    if (EXISTS ${DOLFIN_SOURCE_DIR}/demo/documented/poisson/CMakeLists.txt)
-      file(REMOVE ${DOLFIN_SOURCE_DIR}/demo/documented/poisson/CMakeLists.txt)
+    if (EXISTS ${DOLFIN_SOURCE_DIR}/demo/poisson/CMakeLists.txt)
+      file(REMOVE ${DOLFIN_SOURCE_DIR}/demo/poisson/CMakeLists.txt)
     endif()
     message(FATAL_ERROR "Generation of CMakeLists.txt files failed: \n${CMAKE_GENERATION_OUTPUT}")
   endif()
@@ -445,19 +371,6 @@ else()
   set(MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
 endif()
 
-# Add taget to build .py demo files from Python rst input files, and
-# create a target to build source files from .cpp.rst and .py.rst
-# files (using pylit)
-if (PYTHONINTERP_FOUND)
-  file(GLOB_RECURSE demo_rst_files "demo/*.py.rst" "demo/*.cpp.rst" "demo/*.ufl.rst")
-  add_custom_target(demos_source)
-  foreach(rst_file ${rst_files})
-    add_custom_command(TARGET demos_source PRE_BUILD
-      COMMAND ${PYTHON_EXECUTABLE} "-B" "-u" ../utils/pylit/pylit.py ${rst_file}
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-  endforeach()
-endif()
-
 # Install the demo source files
 install(DIRECTORY demo DESTINATION ${DOLFIN_SHARE_DIR}
   FILES_MATCHING
@@ -477,24 +390,9 @@ enable_testing()
 # Add target "unittests", but do not add to default target
 add_subdirectory(test/unit EXCLUDE_FROM_ALL)
 
-# Add demo but do not add to default target
+# Add demos but do not add to default target
 set(CMAKE_MODULE_PATH "${DOLFIN_CMAKE_DIR}/modules")
 add_subdirectory(demo EXCLUDE_FROM_ALL)
-
-# Add target "copy_data_test_demo"
-if (PYTHONINTERP_FOUND)
-  add_custom_target(copy_data_test_demo
-    COMMAND ${PYTHON_EXECUTABLE} "-B" "-u" ${DOLFIN_SOURCE_DIR}/cmake/scripts/copy-test-demo-data.py ${CMAKE_CURRENT_BINARY_DIR}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-endif()
-
-# Add target "demos" for building the demos
-if (PYTHONINTERP_FOUND)
-  add_custom_target(demos
-    COMMAND ${MAKE_PROGRAM}
-    DEPENDS copy_data_test_demo demos_source
-    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/demo")
-endif()
 
 #------------------------------------------------------------------------------
 # Add "make uninstall" target

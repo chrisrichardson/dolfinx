@@ -4,10 +4,12 @@
 #
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 
-from math import sqrt, pi
-from dolfin import (UnitIntervalMesh, UnitSquareMesh, UnitCubeMesh, MeshQuality, MPI, Cells,
-                    RectangleMesh, Point, CellType, cpp)
-from dolfin_utils.test import skip_in_parallel
+from math import pi, sqrt
+import numpy
+
+from dolfin import (MPI, Cells, CellType, MeshQuality, RectangleMesh,
+                    UnitCubeMesh, UnitIntervalMesh, UnitSquareMesh, cpp)
+from dolfin_utils.test.skips import skip_in_parallel
 
 
 def test_radius_ratio_triangle():
@@ -16,7 +18,7 @@ def test_radius_ratio_triangle():
     mesh = UnitSquareMesh(MPI.comm_world, 12, 12)
     ratios = MeshQuality.radius_ratios(mesh)
     for c in Cells(mesh):
-        assert round(ratios[c] - 0.828427124746, 7) == 0
+        assert round(ratios.values[c.index()] - 0.828427124746, 7) == 0
 
 
 def test_radius_ratio_tetrahedron():
@@ -25,7 +27,7 @@ def test_radius_ratio_tetrahedron():
     mesh = UnitCubeMesh(MPI.comm_world, 14, 14, 14)
     ratios = MeshQuality.radius_ratios(mesh)
     for c in Cells(mesh):
-        assert round(ratios[c] - 0.717438935214, 7) == 0
+        assert round(ratios.values[c.index()] - 0.717438935214, 7) == 0
 
 
 def test_radius_ratio_triangle_min_max():
@@ -65,11 +67,12 @@ def test_radius_ratio_min_radius_ratio_max():
     x[4] = mesh1d.geometry.points[3]
 
     # Create 2D mesh with one equilateral triangle
-    mesh2d = RectangleMesh.create(MPI.comm_world, [Point(0, 0), Point(1, 1)], [
-                                  1, 1], CellType.Type.triangle,
-                                  cpp.mesh.GhostMode.none, 'left')
+    mesh2d = RectangleMesh(
+        MPI.comm_world, [numpy.array([0.0, 0.0, 0.0]),
+                         numpy.array([1.0, 1.0, 0.0])], [1, 1],
+        CellType.Type.triangle, cpp.mesh.GhostMode.none, 'left')
     x = mesh2d.geometry.points
-    x[3] += 0.5 * (sqrt(3.0) - 1.0)
+    x[3, :2] += 0.5 * (sqrt(3.0) - 1.0)
 
     # Create 3D mesh with regular tetrahedron and degenerate cells
     mesh3d = UnitCubeMesh(MPI.comm_self, 1, 1, 1)

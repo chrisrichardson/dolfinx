@@ -4,14 +4,10 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include <petscversion.h>
-
-#ifdef HAS_HDF5
-#include <hdf5.h>
-#endif
-
 #include "defines.h"
 #include "types.h"
+#include <hdf5.h>
+#include <petscversion.h>
 
 //-------------------------------------------------------------------------
 std::string dolfin::dolfin_version() { return std::string(DOLFIN_VERSION); }
@@ -50,36 +46,9 @@ bool dolfin::has_slepc()
 #endif
 }
 //-------------------------------------------------------------------------
-bool dolfin::has_scotch()
-{
-#ifdef HAS_SCOTCH
-  return true;
-#else
-  return false;
-#endif
-}
-//-------------------------------------------------------------------------
 bool dolfin::has_parmetis()
 {
 #ifdef HAS_PARMETIS
-  return true;
-#else
-  return false;
-#endif
-}
-//-------------------------------------------------------------------------
-bool dolfin::has_hdf5()
-{
-#ifdef HAS_HDF5
-  return true;
-#else
-  return false;
-#endif
-}
-//-----------------------------------------------------------------------------
-bool dolfin::has_hdf5_parallel()
-{
-#ifdef H5_HAVE_PARALLEL
   return true;
 #else
   return false;

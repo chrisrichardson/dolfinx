@@ -15,40 +15,20 @@ void PETScOptions::set(std::string option)
   PETScOptions::set<std::string>(option, "");
 }
 //-----------------------------------------------------------------------------
-void PETScOptions::set(std::string option, bool value)
-{
-  PETScOptions::set<bool>(option, value);
-}
-//-----------------------------------------------------------------------------
-void PETScOptions::set(std::string option, int value)
-{
-  PETScOptions::set<int>(option, value);
-}
-//-----------------------------------------------------------------------------
-void PETScOptions::set(std::string option, double value)
-{
-  PETScOptions::set<double>(option, value);
-}
-//-----------------------------------------------------------------------------
-void PETScOptions::set(std::string option, std::string value)
-{
-  PETScOptions::set<std::string>(option, value);
-}
-//-----------------------------------------------------------------------------
 void PETScOptions::clear(std::string option)
 {
   if (option[0] != '-')
     option = '-' + option;
 
   PetscErrorCode ierr;
-  ierr = PetscOptionsClearValue(NULL, option.c_str());
+  ierr = PetscOptionsClearValue(nullptr, option.c_str());
   if (ierr != 0)
     petsc_error(ierr, __FILE__, "PetscOptionsClearValue");
 }
 //-----------------------------------------------------------------------------
 void PETScOptions::clear()
 {
-  PetscErrorCode ierr = PetscOptionsClear(NULL);
+  PetscErrorCode ierr = PetscOptionsClear(nullptr);
   if (ierr != 0)
     petsc_error(ierr, __FILE__, "PetscOptionsClear");
 }

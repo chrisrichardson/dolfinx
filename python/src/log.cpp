@@ -5,9 +5,7 @@
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #include "casters.h"
-#include <dolfin/common/Variable.h>
-#include <dolfin/log/Table.h>
-#include <dolfin/log/log.h>
+#include <dolfin/common/log.h>
 #include <dolfin/mesh/Mesh.h>
 #include <memory>
 #include <pybind11/pybind11.h>
@@ -20,40 +18,39 @@ namespace dolfin_wrappers
 {
 void log(py::module& m)
 {
+  // log level enums
+  py::enum_<loguru::NamedVerbosity>(m, "LogLevel", py::arithmetic())
+      .value("OFF", loguru::Verbosity_OFF)
+      .value("INFO", loguru::Verbosity_INFO)
+      .value("WARNING", loguru::Verbosity_WARNING)
+      .value("ERROR", loguru::Verbosity_ERROR);
 
-  // dolfin::LogLevel enums
-  py::enum_<dolfin::LogLevel>(m, "LogLevel", py::arithmetic())
-      .value("DEBUG", dolfin::LogLevel::DBG)
-      .value("TRACE", dolfin::LogLevel::TRACE)
-      .value("PROGRESS", dolfin::LogLevel::PROGRESS)
-      .value("INFO", dolfin::LogLevel::INFO)
-      .value("WARNING", dolfin::LogLevel::WARNING)
-      .value("ERROR", dolfin::LogLevel::ERROR)
-      .value("CRITICAL", dolfin::LogLevel::CRITICAL);
-
-  // dolfin::Table
-  py::class_<dolfin::Table, std::shared_ptr<dolfin::Table>,
-             dolfin::common::Variable>(m, "Table")
-      .def(py::init<std::string>())
-      .def("str", &dolfin::Table::str);
-
-  // dolfin/log free functions
-  m.def("info",
-        [](const dolfin::common::Variable& v) { dolfin::log::info(v); });
-  m.def("info", [](const dolfin::common::Variable& v, bool verbose) {
-    dolfin::log::info(v, verbose);
+  m.def("set_output_file", [](std::string filename) {
+    loguru::add_file(filename.c_str(), loguru::Truncate,
+                     loguru::Verbosity_INFO);
   });
-  m.def("info", [](std::string s) { dolfin::log::info(s); });
-  m.def("info", [](const dolfin::parameter::Parameters& p, bool verbose) {
-    dolfin::log::info(p, verbose);
+
+  m.def("set_log_level", [](loguru::NamedVerbosity level) {
+    loguru::g_stderr_verbosity = level;
   });
-  m.def("info", [](const dolfin::mesh::Mesh& mesh,
-                   bool verbose) { dolfin::log::info(mesh, verbose); },
-        py::arg("mesh"), py::arg("verbose") = false);
-  m.def("set_log_level", &dolfin::log::set_log_level);
-  m.def("get_log_level", &dolfin::log::get_log_level);
-  m.def("log", [](dolfin::LogLevel level, std::string s) {
-    dolfin::log::log(level, s);
+  m.def("get_log_level",
+        []() { return loguru::NamedVerbosity(loguru::g_stderr_verbosity); });
+  m.def("log", [](loguru::NamedVerbosity level, std::string s) {
+    switch (level)
+    {
+    case (loguru::Verbosity_INFO):
+      LOG(INFO) << s;
+      break;
+    case (loguru::Verbosity_WARNING):
+      LOG(WARNING) << s;
+      break;
+    case (loguru::Verbosity_ERROR):
+      LOG(ERROR) << s;
+      break;
+    default:
+      throw std::runtime_error("Log level not supported");
+      break;
+    }
   });
 }
-}
+} // namespace dolfin_wrappers

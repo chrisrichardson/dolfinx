@@ -5,17 +5,15 @@
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #include "PETScDMCollection.h"
-#include <boost/multi_array.hpp>
+#include <Eigen/Dense>
 #include <dolfin/common/IndexMap.h>
-#include <dolfin/common/RangedIndexSet.h>
 #include <dolfin/fem/CoordinateMapping.h>
+#include <dolfin/fem/DofMap.h>
 #include <dolfin/fem/FiniteElement.h>
-#include <dolfin/fem/GenericDofMap.h>
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/geometry/BoundingBoxTree.h>
 #include <dolfin/la/PETScMatrix.h>
-#include <dolfin/log/log.h>
 #include <dolfin/mesh/Cell.h>
 #include <dolfin/mesh/MeshIterator.h>
 #include <petscdmshell.h>
@@ -56,24 +54,24 @@ struct lt_coordinate
   const double TOL;
 };
 
-std::map<std::vector<double>, std::vector<std::size_t>, lt_coordinate>
+std::map<std::vector<double>, std::vector<std::int64_t>, lt_coordinate>
 tabulate_coordinates_to_dofs(const function::FunctionSpace& V)
 {
-  std::map<std::vector<double>, std::vector<std::size_t>, lt_coordinate>
+  std::map<std::vector<double>, std::vector<std::int64_t>, lt_coordinate>
       coords_to_dofs(lt_coordinate(1.0e-12));
 
   // Extract mesh, dofmap and element
-  assert(V.dofmap());
-  assert(V.element());
-  assert(V.mesh());
-  const fem::GenericDofMap& dofmap = *V.dofmap();
-  const fem::FiniteElement& element = *V.element();
-  const mesh::Mesh& mesh = *V.mesh();
-  Eigen::Array<std::size_t, Eigen::Dynamic, 1> local_to_global
-      = dofmap.tabulate_local_to_global_dofs();
+  assert(V.dofmap);
+  assert(V.element);
+  assert(V.mesh);
+  const fem::DofMap& dofmap = *V.dofmap;
+  const fem::FiniteElement& element = *V.element;
+  const mesh::Mesh& mesh = *V.mesh;
+  Eigen::Array<std::int64_t, Eigen::Dynamic, 1> local_to_global
+      = dofmap.index_map->indices(true);
 
   // Geometric dimension
-  const std::size_t gdim = mesh.geometry().dim();
+  const int gdim = mesh.geometry().dim();
 
   // Get dof coordinates on reference element
   const EigenRowArrayXXd& X = element.dof_reference_coordinates();
@@ -86,22 +84,35 @@ tabulate_coordinates_to_dofs(const function::FunctionSpace& V)
   }
   const CoordinateMapping& cmap = *mesh.geometry().coord_mapping;
 
+  // Prepare cell geometry
+  const mesh::Connectivity& connectivity_g
+      = mesh.coordinate_dofs().entity_points();
+  const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>> pos_g
+      = connectivity_g.entity_positions();
+  const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>> cell_g
+      = connectivity_g.connections();
+  // FIXME: Add proper interface for num coordinate dofs
+  const int num_dofs_g = connectivity_g.size(0);
+  const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& x_g
+      = mesh.geometry().points();
+
   // Loop over cells and tabulate dofs
   EigenRowArrayXXd coordinates(element.space_dimension(), gdim);
-  EigenRowArrayXXd coordinate_dofs;
+  EigenRowArrayXXd coordinate_dofs(num_dofs_g, gdim);
   std::vector<double> coors(gdim);
 
   // Speed up the computations by only visiting (most) dofs once
   const std::int64_t local_size
-      = dofmap.ownership_range()[1] - dofmap.ownership_range()[0];
-  common::RangedIndexSet already_visited(
-      std::array<std::int64_t, 2>{{0, local_size}});
+      = dofmap.index_map->size_local() * dofmap.index_map->block_size;
+  std::vector<bool> already_visited(local_size, false);
 
   for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
   {
     // Get cell coordinates
-    coordinate_dofs.resize(cell.num_vertices(), gdim);
-    cell.get_coordinate_dofs(coordinate_dofs);
+    const int cell_index = cell.index();
+    for (int i = 0; i < num_dofs_g; ++i)
+      for (int j = 0; j < gdim; ++j)
+        coordinate_dofs(i, j) = x_g(cell_g[pos_g[cell_index] + i], j);
 
     // Get local-to-global map
     auto dofs = dofmap.cell_dofs(cell.index());
@@ -116,7 +127,7 @@ tabulate_coordinates_to_dofs(const function::FunctionSpace& V)
       if (dof < local_size)
       {
         // Skip already checked dofs
-        if (!already_visited.insert(dof))
+        if (already_visited[dof])
           continue;
 
         // Put coordinates in coors
@@ -126,12 +137,14 @@ tabulate_coordinates_to_dofs(const function::FunctionSpace& V)
 
         // Add dof to list at this coord
         const auto ins = coords_to_dofs.insert({coors, {local_to_global[dof]}});
-
         if (!ins.second)
           ins.first->second.push_back(local_to_global[dof]);
+
+        already_visited[dof] = true;
       }
     }
   }
+
   return coords_to_dofs;
 }
 } // namespace
@@ -147,8 +160,8 @@ PETScDMCollection::PETScDMCollection(
     assert(_spaces[i].get());
 
     // Get MPI communicator from mesh::Mesh
-    assert(_spaces[i]->mesh());
-    MPI_Comm comm = _spaces[i]->mesh()->mpi_comm();
+    assert(_spaces[i]->mesh);
+    MPI_Comm comm = _spaces[i]->mesh->mpi_comm();
 
     // Create DM
     DMShellCreate(comm, &_dms[i]);
@@ -214,29 +227,29 @@ void PETScDMCollection::reset(int i)
   //  PetscObjectDereference((PetscObject)_dms[i]);
 }
 //-----------------------------------------------------------------------------
-std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
+la::PETScMatrix PETScDMCollection::create_transfer_matrix(
     const function::FunctionSpace& coarse_space,
     const function::FunctionSpace& fine_space)
 {
   // FIXME: refactor and split up
 
   // Get coarse mesh and dimension of the domain
-  assert(coarse_space.mesh());
-  const mesh::Mesh meshc = *coarse_space.mesh();
-  std::size_t gdim = meshc.geometry().dim();
-  std::size_t tdim = meshc.topology().dim();
+  assert(coarse_space.mesh);
+  const mesh::Mesh& meshc = *coarse_space.mesh;
+  const int gdim = meshc.geometry().dim();
+  const int tdim = meshc.topology().dim();
 
   // MPI communicator, size and rank
   const MPI_Comm mpi_comm = meshc.mpi_comm();
   const unsigned int mpi_size = MPI::size(mpi_comm);
 
   // Initialise bounding box tree and dofmaps
-  std::shared_ptr<geometry::BoundingBoxTree> treec = meshc.bounding_box_tree();
-  std::shared_ptr<const fem::GenericDofMap> coarsemap = coarse_space.dofmap();
-  std::shared_ptr<const fem::GenericDofMap> finemap = fine_space.dofmap();
+  geometry::BoundingBoxTree treec(meshc, meshc.topology().dim());
+  std::shared_ptr<const fem::DofMap> coarsemap = coarse_space.dofmap;
+  std::shared_ptr<const fem::DofMap> finemap = fine_space.dofmap;
 
   // Create map from coordinates to dofs sharing that coordinate
-  std::map<std::vector<double>, std::vector<std::size_t>, lt_coordinate>
+  std::map<std::vector<double>, std::vector<std::int64_t>, lt_coordinate>
       coords_to_dofs = tabulate_coordinates_to_dofs(fine_space);
 
   // Global dimensions of the dofs and of the transfer matrix (M-by-N,
@@ -246,35 +259,37 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
   std::size_t N = coarse_space.dim();
 
   // Local dimension of the dofs and of the transfer matrix
-  std::array<std::int64_t, 2> m = finemap->ownership_range();
-  std::array<std::int64_t, 2> n = coarsemap->ownership_range();
+  std::array<std::int64_t, 2> m = finemap->index_map->local_range();
+  std::array<std::int64_t, 2> n = coarsemap->index_map->local_range();
+  m[0] *= finemap->index_map->block_size;
+  m[1] *= finemap->index_map->block_size;
+  n[0] *= coarsemap->index_map->block_size;
+  n[1] *= coarsemap->index_map->block_size;
 
   // Get finite element for the coarse space. This will be needed to
   // evaluate the basis functions for each cell.
-  std::shared_ptr<const fem::FiniteElement> el = coarse_space.element();
+  std::shared_ptr<const fem::FiniteElement> el = coarse_space.element;
 
   // Check that it is the same kind of element on each space.
   {
-    std::shared_ptr<const fem::FiniteElement> elf = fine_space.element();
+    std::shared_ptr<const fem::FiniteElement> elf = fine_space.element;
     // Check that function ranks match
     if (el->value_rank() != elf->value_rank())
     {
-      log::dolfin_error("create_transfer_matrix",
-                        "Creating interpolation matrix",
-                        "Ranks of function spaces do not match: %d, %d.",
-                        el->value_rank(), elf->value_rank());
+      throw std::runtime_error("Ranks of function spaces do not match:"
+                               + std::to_string(el->value_rank()) + ", "
+                               + std::to_string(elf->value_rank()));
     }
 
     // Check that function dims match
-    for (std::size_t i = 0; i < el->value_rank(); ++i)
+    for (int i = 0; i < el->value_rank(); ++i)
     {
       if (el->value_dimension(i) != elf->value_dimension(i))
       {
-        log::dolfin_error(
-            "create_transfer_matrix", "Creating interpolation matrix",
-            "Dimension %d of function space (%d) does not match "
-            "dimension %d of function space (%d)",
-            i, el->value_dimension(i), i, elf->value_dimension(i));
+        throw std::runtime_error("Dimensions of function spaces ("
+                                 + std::to_string(i) + ") do not match:"
+                                 + std::to_string(el->value_dimension(i)) + ", "
+                                 + std::to_string(elf->value_dimension(i)));
       }
     }
   }
@@ -284,7 +299,7 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
 
   // Number of dofs associated with each fine point
   unsigned int data_size = 1;
-  for (unsigned data_dim = 0; data_dim < el->value_rank(); data_dim++)
+  for (int data_dim = 0; data_dim < el->value_rank(); data_dim++)
     data_size *= el->value_dimension(data_dim);
 
   // The overall idea is: a fine point can be on a coarse cell in the
@@ -329,10 +344,10 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
   for (const auto& map_it : coords_to_dofs)
   {
     const std::vector<double>& _x = map_it.first;
-    geometry::Point curr_point(gdim, _x.data());
+    Eigen::Map<const Eigen::Vector3d> curr_point(_x.data());
 
     // Compute which processes' BBoxes contain the fine point
-    found_ranks = treec->compute_process_collisions(curr_point);
+    found_ranks = treec.compute_process_collisions(curr_point);
 
     if (found_ranks.empty())
     {
@@ -371,9 +386,9 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
     unsigned int n_points = recv_found[p].size() / gdim;
     for (unsigned int i = 0; i < n_points; ++i)
     {
-      const geometry::Point curr_point(gdim, &recv_found[p][i * gdim]);
+      Eigen::Map<const Eigen::Vector3d> curr_point(&recv_found[p][i * gdim]);
       send_ids[p].push_back(
-          treec->compute_first_entity_collision(curr_point, meshc));
+          treec.compute_first_entity_collision(curr_point, meshc));
     }
   }
   std::vector<std::vector<unsigned int>> recv_ids(mpi_size);
@@ -444,24 +459,26 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
     assert(npoints == recv_found[p].size() / gdim);
     assert(npoints == recv_found_global_row_indices[p].size() / data_size);
 
-    const boost::multi_array_ref<double, 2> point_p(
-        recv_found[p].data(), boost::extents[npoints][gdim]);
-    const boost::multi_array_ref<int, 2> global_idx_p(
-        recv_found_global_row_indices[p].data(),
-        boost::extents[npoints][data_size]);
+    Eigen::Map<const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic,
+                                  Eigen::RowMajor>>
+        point_p(recv_found[p].data(), npoints, gdim);
 
+    Eigen::Map<const Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic,
+                                  Eigen::RowMajor>>
+        global_idx_p(recv_found_global_row_indices[p].data(), npoints,
+                     data_size);
     for (unsigned int i = 0; i < npoints; ++i)
     {
       if (id_p[i] != std::numeric_limits<unsigned int>::max()
-          and global_idx_p[i][0] != -1)
+          and global_idx_p(i, 0) != -1)
       {
         found_ids.push_back(id_p[i]);
-        global_row_indices.insert(global_row_indices.end(),
-                                  global_idx_p[i].begin(),
-                                  global_idx_p[i].end());
+        global_row_indices.insert(
+            global_row_indices.end(), global_idx_p.row(i).data(),
+            global_idx_p.row(i).data() + global_idx_p.cols());
 
-        found_points.insert(found_points.end(), point_p[i].begin(),
-                            point_p[i].end());
+        found_points.insert(found_points.end(), point_p.row(i).data(),
+                            point_p.row(i).data() + point_p.cols());
       }
     }
   }
@@ -497,10 +514,8 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
 
   // Initialise local to global dof maps (needed to allocate the
   // entries of the transfer matrix with the correct global indices)
-  Eigen::Array<std::size_t, Eigen::Dynamic, 1> coarse_local_to_global_dofs
-      = coarsemap->tabulate_local_to_global_dofs();
-
-  EigenRowArrayXXd coordinate_dofs; // cell dofs coordinates vector
+  Eigen::Array<std::int64_t, Eigen::Dynamic, 1> coarse_local_to_global_dofs
+      = coarsemap->index_map->indices(true);
 
   // Loop over the found coarse cells
   Eigen::Map<const EigenRowArrayXXd> x(found_points.data(), found_ids.size(),
@@ -511,6 +526,20 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
   EigenArrayXd detJ(1);
   Eigen::Tensor<double, 3, Eigen::RowMajor> K(1, tdim, gdim);
 
+  // Prepare cell geometry
+  const mesh::Connectivity& connectivity_g
+      = meshc.coordinate_dofs().entity_points();
+  const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>> pos_g
+      = connectivity_g.entity_positions();
+  const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>> cell_g
+      = connectivity_g.connections();
+  // FIXME: Add proper interface for num coordinate dofs
+  const int num_dofs_g = connectivity_g.size(0);
+  const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& x_g
+      = meshc.geometry().points();
+  EigenRowArrayXXd coordinate_dofs(num_dofs_g, gdim);
+  ; // cell dofs coordinates vector
+
   for (unsigned int i = 0; i < found_ids.size(); ++i)
   {
     // Get coarse cell id and point
@@ -520,8 +549,10 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
     mesh::Cell coarse_cell(meshc, static_cast<std::size_t>(id));
 
     // Get dofs coordinates of the coarse cell
-    coordinate_dofs.resize(coarse_cell.num_vertices(), gdim);
-    coarse_cell.get_coordinate_dofs(coordinate_dofs);
+    const int cell_index = coarse_cell.index();
+    for (int i = 0; i < num_dofs_g; ++i)
+      for (int j = 0; j < gdim; ++j)
+        coordinate_dofs(i, j) = x_g(cell_g[pos_g[cell_index] + i], j);
 
     // Evaluate the basis functions of the coarse cells at the fine
     // point and store the values into temp_values
@@ -537,7 +568,7 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
     {
       const unsigned int fine_row = i * data_size + k;
       const std::size_t global_fine_dof = global_row_indices[fine_row];
-      int p = finemap->index_map()->owner(global_fine_dof / data_size);
+      int p = finemap->index_map->owner(global_fine_dof / data_size);
 
       // Loop over the coarse dofs and stuff their contributions
       for (unsigned j = 0; j < eldim; j++)
@@ -550,7 +581,7 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
         // Set the value
         values(fine_row, j) = temp_values(0, j, k);
 
-        int pc = coarsemap->index_map()->owner(coarse_dof / data_size);
+        int pc = coarsemap->index_map->owner(coarse_dof / data_size);
         if (p == pc)
           send_dnnz[p].push_back(global_fine_dof);
         else
@@ -628,27 +659,21 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
   ierr = MatAssemblyEnd(I, MAT_FINAL_ASSEMBLY);
   CHKERRABORT(PETSC_COMM_WORLD, ierr);
 
-  // create shared pointer and return the pointer to the transfer
-  // matrix
-  std::shared_ptr<la::PETScMatrix> ptr = std::make_shared<la::PETScMatrix>(I);
-  ierr = MatDestroy(&I);
-  CHKERRABORT(PETSC_COMM_WORLD, ierr);
-
-  return ptr;
+  return la::PETScMatrix(I, false);
 }
 //-----------------------------------------------------------------------------
 void PETScDMCollection::find_exterior_points(
     MPI_Comm mpi_comm, const mesh::Mesh& meshc,
-    std::shared_ptr<const geometry::BoundingBoxTree> treec, int dim,
-    int data_size, const std::vector<double>& send_points,
+    const geometry::BoundingBoxTree& treec, int dim, int data_size,
+    const std::vector<double>& send_points,
     const std::vector<int>& send_indices, std::vector<int>& indices,
     std::vector<std::size_t>& cell_ids, std::vector<double>& points)
 {
   assert(send_indices.size() / data_size == send_points.size() / dim);
-  const boost::const_multi_array_ref<int, 2> send_indices_arr(
-      send_indices.data(),
-      boost::extents[send_indices.size() / data_size][data_size]);
-
+  Eigen::Map<
+      const Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>
+      send_indices_arr(send_indices.data(), send_indices.size() / data_size,
+                       data_size);
   unsigned int mpi_rank = MPI::rank(mpi_comm);
   unsigned int mpi_size = MPI::size(mpi_comm);
 
@@ -667,15 +692,14 @@ void PETScDMCollection::find_exterior_points(
 
   send_distance.reserve(num_recv_points);
   ids.reserve(num_recv_points);
-
   for (const auto& p : recv_points)
   {
     unsigned int n_points = p.size() / dim;
     for (unsigned int i = 0; i < n_points; ++i)
     {
-      const geometry::Point curr_point(dim, &p[i * dim]);
+      Eigen::Map<const Eigen::Vector3d> curr_point(&p[i * dim]);
       std::pair<unsigned int, double> find_point
-          = treec->compute_closest_entity(curr_point, meshc);
+          = treec.compute_closest_entity(curr_point, meshc);
       send_distance.push_back(find_point.second);
       ids.push_back(find_point.first);
     }
@@ -693,8 +717,10 @@ void PETScDMCollection::find_exterior_points(
   for (unsigned int p = 0; p != mpi_size; ++p)
   {
     unsigned int n_points = recv_points[p].size() / dim;
-    boost::multi_array_ref<double, 2> point_arr(recv_points[p].data(),
-                                                boost::extents[n_points][dim]);
+
+    Eigen::Map<const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic,
+                                  Eigen::RowMajor>>
+        point_arr(recv_points[p].data(), n_points, dim);
     for (unsigned int i = 0; i < n_points; ++i)
     {
       unsigned int min_proc = 0;
@@ -712,14 +738,15 @@ void PETScDMCollection::find_exterior_points(
       if (min_proc == mpi_rank)
       {
         // If this process has closest cell, save the information
-        points.insert(points.end(), point_arr[i].begin(), point_arr[i].end());
+        points.insert(points.end(), point_arr.row(i).data(),
+                      point_arr.row(i).data() + point_arr.cols());
         cell_ids.push_back(ids[ct]);
       }
       if (p == mpi_rank)
       {
         send_global_indices[min_proc].insert(
-            send_global_indices[min_proc].end(), send_indices_arr[i].begin(),
-            send_indices_arr[i].end());
+            send_global_indices[min_proc].end(), send_indices_arr.row(i).data(),
+            send_indices_arr.row(i).data() + send_indices_arr.cols());
       }
       ++ct;
     }
@@ -741,7 +768,7 @@ PetscErrorCode PETScDMCollection::create_global_vector(DM dm, Vec* vec)
 
   // Create Vector
   function::Function u(*V);
-  *vec = u.vector()->vec();
+  *vec = u.vector().vec();
 
   // FIXME: Does increasing the reference count lead to a memory leak?
   // Increment PETSc reference counter the Vec
@@ -762,14 +789,14 @@ PetscErrorCode PETScDMCollection::create_interpolation(DM dmc, DM dmf, Mat* mat,
   // Build interpolation matrix (V0 to V1)
   assert(V0);
   assert(V1);
-  std::shared_ptr<la::PETScMatrix> P = create_transfer_matrix(*V0, *V1);
+  auto P = std::make_shared<la::PETScMatrix>(create_transfer_matrix(*V0, *V1));
 
-  // Copy PETSc matrix pointer and inrease reference count
+  // Copy PETSc matrix pointer and increase reference count
   *mat = P->mat();
   PetscObjectReference((PetscObject)*mat);
 
   // Set optional vector to NULL
-  *vec = NULL;
+  *vec = nullptr;
 
   return 0;
 }

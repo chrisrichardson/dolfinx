@@ -8,7 +8,6 @@
 
 #include "HDF5Interface.h"
 #include <dolfin/common/MPI.h>
-#include <dolfin/common/Variable.h>
 #include <dolfin/function/Function.h>
 #include <dolfin/la/PETScVector.h>
 #include <dolfin/mesh/Mesh.h>
@@ -32,11 +31,6 @@ namespace function
 class FunctionSpace;
 } // namespace function
 
-namespace geometry
-{
-class Point;
-}
-
 namespace mesh
 {
 class CellType;
@@ -47,7 +41,7 @@ namespace io
 
 /// Interface to HDF5 files
 
-class HDF5File : public common::Variable
+class HDF5File
 {
 
 public:
@@ -66,7 +60,7 @@ public:
   void flush();
 
   /// Write points to file
-  void write(const std::vector<geometry::Point>& points,
+  void write(const std::vector<Eigen::Vector3d>& points,
              const std::string name);
 
   /// Write simple vector of double to file
@@ -85,7 +79,7 @@ public:
 
   /// Write Mesh of given cell dimension to file in a format
   /// suitable for re-reading
-  void write(const mesh::Mesh& mesh, const std::size_t cell_dim,
+  void write(const mesh::Mesh& mesh, const int cell_dim,
              const std::string name);
 
   /// Write function::Function to file in a format suitable for re-reading
@@ -110,7 +104,7 @@ public:
   /// stored in the HDF5 file. Optionally re-use any partition data
   /// in the file. This function requires all necessary data for
   /// constructing a mesh::Mesh to be present in the HDF5 file.
-  mesh::Mesh read_mesh(MPI_Comm, const std::string data_path,
+  mesh::Mesh read_mesh(const std::string data_path,
                        bool use_partition_from_file,
                        const mesh::GhostMode ghost_mode) const;
 
@@ -123,7 +117,7 @@ public:
   /// This function is typically called when using the XDMF format,
   /// in which case the meta data has already been read from an XML
   /// file
-  mesh::Mesh read_mesh(MPI_Comm comm, const std::string topology_path,
+  mesh::Mesh read_mesh(const std::string topology_path,
                        const std::string geometry_path, const int gdim,
                        const mesh::CellType& cell_type,
                        const std::int64_t expected_num_global_cells,
@@ -143,10 +137,6 @@ public:
   void write(const mesh::MeshFunction<double>& meshfunction,
              const std::string name);
 
-  /// Write mesh::MeshFunction to file in a format suitable for re-reading
-  void write(const mesh::MeshFunction<bool>& meshfunction,
-             const std::string name);
-
   /// Read mesh::MeshFunction from file
   mesh::MeshFunction<std::size_t>
   read_mf_size_t(std::shared_ptr<const mesh::Mesh> mesh,
@@ -160,10 +150,6 @@ public:
   mesh::MeshFunction<double>
   read_mf_double(std::shared_ptr<const mesh::Mesh> mesh,
                  const std::string name) const;
-
-  /// Read mesh::MeshFunction from file
-  mesh::MeshFunction<bool> read_mf_bool(std::shared_ptr<const mesh::Mesh> mesh,
-                                        const std::string name) const;
 
   /// Write mesh::MeshValueCollection to file
   void write(const mesh::MeshValueCollection<std::size_t>& mesh_values,
@@ -204,6 +190,9 @@ public:
   /// Get the file ID
   hid_t h5_id() const { return _hdf5_file_id; }
 
+  // FIXME: document
+  bool chunking = false;
+
 private:
   // Friend
   friend class XDMFFile;
@@ -238,6 +227,14 @@ private:
   void write_data(const std::string dataset_name, const std::vector<T>& data,
                   const std::vector<std::int64_t> global_size, bool use_mpi_io);
 
+  // Write 2D dataset to HDF5. Eigen::Arrays on each process must have the same
+  // number of columns.
+  template <typename T>
+  void write_data(
+      const std::string dataset_name,
+      Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& data,
+      bool use_mpi_io);
+
   // HDF5 file descriptor/handle
   hid_t _hdf5_file_id;
 
@@ -267,12 +264,37 @@ void HDF5File::write_data(const std::string dataset_name,
       = MPI::global_offset(_mpi_comm.comm(), num_local_items, true);
   std::array<std::int64_t, 2> range = {{offset, offset + num_local_items}};
 
-  // Write data to HDF5 file
-  const bool chunking = parameters["chunking"];
-  // Ensure dataset starts with '/'
+  // Write data to HDF5 file. Ensure dataset starts with '/'.
   std::string dset_name(dataset_name);
   if (dset_name[0] != '/')
     dset_name = "/" + dataset_name;
+
+  HDF5Interface::write_dataset(_hdf5_file_id, dset_name, data.data(), range,
+                               global_size, use_mpi_io, chunking);
+}
+//-----------------------------------------------------------------------------
+template <typename T>
+void HDF5File::write_data(
+    const std::string dataset_name,
+    Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& data,
+    bool use_mpi_io)
+{
+  assert(_hdf5_file_id > 0);
+
+  // Compute offset
+  const std::int64_t offset
+      = MPI::global_offset(_mpi_comm.comm(), data.rows(), true);
+  std::array<std::int64_t, 2> range = {{offset, offset + data.rows()}};
+
+  // Write data to HDF5 file. Ensure dataset starts with '/'.
+  std::string dset_name(dataset_name);
+  if (dset_name[0] != '/')
+    dset_name = "/" + dataset_name;
+
+  std::int64_t global_rows = MPI::sum(_mpi_comm.comm(), data.rows());
+  std::vector<std::int64_t> global_size = {global_rows, data.cols()};
+  if (data.cols() == 1)
+    global_size = {global_rows};
 
   HDF5Interface::write_dataset(_hdf5_file_id, dset_name, data.data(), range,
                                global_size, use_mpi_io, chunking);

@@ -4,9 +4,12 @@
 #
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 
+import numpy
 import pytest
-from dolfin import UnitSquareMesh, UnitCubeMesh, Face, Faces, MPI
-from dolfin_utils.test import skip_in_parallel, fixture
+
+from dolfin import MPI, Face, Faces, UnitCubeMesh, UnitSquareMesh
+from dolfin_utils.test.fixtures import fixture
+from dolfin_utils.test.skips import skip_in_parallel
 
 
 @fixture
@@ -22,9 +25,8 @@ def square():
 @skip_in_parallel
 def test_Area(cube, square):
     """Iterate over faces and sum area."""
-
     area = 0.0
-    cube.init(2)
+    cube.create_entities(2)
     for f in Faces(cube):
         area += f.area()
     assert round(area - 39.21320343559672494393, 7) == 0
@@ -38,10 +40,10 @@ def test_Area(cube, square):
 @skip_in_parallel
 def test_NormalPoint(cube, square):
     """Compute normal vector to each face."""
-    cube.init(2)
+    cube.create_entities(2)
     for f in Faces(cube):
         n = f.normal()
-        assert round(n.norm() - 1.0, 7) == 0
+        assert round(numpy.linalg.norm(n) - 1.0, 7) == 0
 
     f = Face(square, 0)
     with pytest.raises(RuntimeError):
@@ -51,8 +53,7 @@ def test_NormalPoint(cube, square):
 @skip_in_parallel
 def test_NormalComponent(cube, square):
     """Compute normal vector components to each face."""
-
-    cube.init(2)
+    cube.create_entities(2)
     for f in Faces(cube):
         n = f.normal()
         norm = sum([x * x for x in n])

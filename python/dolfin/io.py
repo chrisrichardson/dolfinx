@@ -6,15 +6,9 @@
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 """IO module for input data, post-processing and checkpointing"""
 
-from dolfin import cpp
-from dolfin import fem
-from dolfin import function
+from dolfin import cpp, fem, function
 
-
-__all__ = [
-    "HDF5File",
-    "XDMFFile"
-]
+__all__ = ["HDF5File", "XDMFFile"]
 
 
 class HDF5File:
@@ -89,10 +83,10 @@ class HDF5File:
         return self._cpp_object.read_vector(mpi_comm, data_path,
                                             use_partition_from_file)
 
-    def read_mesh(self, mpi_comm, data_path: str,
+    def read_mesh(self, data_path: str,
                   use_partition_from_file: bool, ghost_mode):
-        mesh = self._cpp_object.read_mesh(mpi_comm, data_path,
-                                          use_partition_from_file, ghost_mode)
+        mesh = self._cpp_object.read_mesh(data_path, use_partition_from_file,
+                                          ghost_mode)
         mesh.geometry.coord_mapping = fem.create_coordinate_map(mesh)
         return mesh
 
@@ -177,6 +171,10 @@ class XDMFFile:
     #     """Read MeshValueCollection of type size_t"""
     #     return self._cpp_object.read_mvc_size_t(mesh, name)
 
+    def read_mvc_bool(self, mesh, name: str = ""):
+        """Read MeshValueCollection of type bool"""
+        return self._cpp_object.read_mvc_bool(mesh, name)
+
     def read_mvc_int(self, mesh, name: str = ""):
         """Read MeshValueCollection of type int"""
         return self._cpp_object.read_mvc_int(mesh, name)
@@ -203,12 +201,13 @@ class XDMFFile:
 
     # ----------------------------------------------------------
 
-    def read_mesh(self, mpi_comm, ghost_mode):
-        mesh = self._cpp_object.read_mesh(mpi_comm, ghost_mode)
+    def read_mesh(self, ghost_mode):
+        mesh = self._cpp_object.read_mesh(ghost_mode)
         mesh.geometry.coord_mapping = fem.create_coordinate_map(mesh)
         return mesh
 
-    def read_checkpoint(self, V, name: str, counter: int = -1) -> function.Function:
+    def read_checkpoint(self, V, name: str,
+                        counter: int = -1) -> function.Function:
         """Read finite element Function from checkpointing format
 
         Parameters
@@ -236,10 +235,7 @@ class XDMFFile:
         u_cpp = self._cpp_object.read_checkpoint(V_cpp, name, counter)
         return function.Function(V, u_cpp.vector())
 
-    def write_checkpoint(self,
-                         u,
-                         name: str,
-                         time_step: float = 0.0) -> None:
+    def write_checkpoint(self, u, name: str, time_step: float = 0.0) -> None:
         """Write finite element Function in checkpointing format
 
         """

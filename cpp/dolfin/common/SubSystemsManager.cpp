@@ -5,6 +5,8 @@
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #define MPICH_IGNORE_CXX_SEEK 1
+
+#include <dolfin/common/log.h>
 #include <iostream>
 #include <mpi.h>
 #include <petsc.h>
@@ -16,9 +18,6 @@
 #include <boost/algorithm/string/trim.hpp>
 
 #include "SubSystemsManager.h"
-#include <dolfin/common/constants.h>
-#include <dolfin/log/log.h>
-#include <dolfin/parameter/GlobalParameters.h>
 
 using namespace dolfin::common;
 
@@ -72,11 +71,17 @@ int SubSystemsManager::init_mpi(int argc, char* argv[],
   return provided;
 }
 //-----------------------------------------------------------------------------
+void SubSystemsManager::init_logging(int argc, char* argv[])
+{
+  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  loguru::init(argc, argv, "-loglevel");
+}
+//-----------------------------------------------------------------------------
 void SubSystemsManager::init_petsc()
 {
   // Dummy command-line arguments
   int argc = 0;
-  char** argv = NULL;
+  char** argv = nullptr;
 
   // Initialize PETSc
   init_petsc(argc, argv);
@@ -96,26 +101,16 @@ void SubSystemsManager::init_petsc(int argc, char* argv[])
 
   // Print message if PETSc is initialised with command line arguments
   if (argc > 1)
-    log::log(TRACE, "Initializing PETSc with given command-line arguments.");
+    LOG(INFO) << "Initializing PETSc with given command-line arguments.";
 
   PetscBool is_initialized;
   PetscInitialized(&is_initialized);
   if (!is_initialized)
-    PetscInitialize(&argc, &argv, NULL, NULL);
+    PetscInitialize(&argc, &argv, nullptr, nullptr);
 
 #ifdef HAS_SLEPC
-  SlepcInitialize(&argc, &argv, NULL, NULL);
+  SlepcInitialize(&argc, &argv, nullptr, nullptr);
 #endif
-
-  // Avoid using default PETSc signal handler
-  // const bool use_petsc_signal_handler =
-  // parameters["use_petsc_signal_handler"];
-  // if (!use_petsc_signal_handler)
-  //  PetscPopSignalHandler();
-
-  // Use our own error handler so we can pretty print errors from
-  // PETSc
-  // PetscPushErrorHandler(PetscDolfinErrorHandler, nullptr);
 
   // Remember that PETSc has been initialized
   singleton().petsc_initialized = true;
@@ -190,9 +185,9 @@ void SubSystemsManager::finalize_petsc()
 //-----------------------------------------------------------------------------
 bool SubSystemsManager::mpi_initialized()
 {
-// This function not affected if MPI_Finalize has been called. It
-// returns true if MPI_Init has been called at any point, even if
-// MPI_Finalize has been called.
+  // This function not affected if MPI_Finalize has been called. It
+  // returns true if MPI_Init has been called at any point, even if
+  // MPI_Finalize has been called.
 
   int mpi_initialized;
   MPI_Initialized(&mpi_initialized);
@@ -223,14 +218,11 @@ PetscErrorCode SubSystemsManager::PetscDolfinErrorHandler(
   PetscErrorMessage(n, &desc, nullptr);
 
   // Log detailed error info
-  log::log(TRACE,
-           "PetscDolfinErrorHandler: line '%d', function '%s', file '%s',\n"
-           "                       : error code '%d' (%s), message follows:",
-           line, fun, file, n, desc);
-  // NOTE: don't put _mess as variadic argument; it might get trimmed
-  log::log(TRACE, std::string(78, '-'));
-  log::log(TRACE, _mess);
-  log::log(TRACE, std::string(78, '-'));
+  LOG(ERROR)
+      << "PetscDolfinErrorHandler: line '{}', function '{}', file '{}',\n"
+         "                       : error code '{}' ({}), message follows:"
+      << line << fun << file << n << desc;
+  LOG(ERROR) << (_mess);
 
   // Continue with error handling
   PetscFunctionReturn(n);

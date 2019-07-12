@@ -1,27 +1,29 @@
-import os
-import re
-import sys
-import platform
-import subprocess
 import multiprocessing
-
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
+import os
+import platform
+import re
+import subprocess
+import sys
 from distutils.version import LooseVersion
+
+from setuptools import Extension, setup
+from setuptools.command.build_ext import build_ext
 
 if sys.version_info < (3, 5):
     print("Python 3.5 or higher required, please upgrade.")
     sys.exit(1)
 
-VERSION = "2018.2.0.dev0"
-RESTRICT_REQUIREMENTS = ">=2018.2.0.dev0,<2018.3"
+VERSION = "2019.2.0.dev0"
+RESTRICT_REQUIREMENTS = ">=2019.2.0.dev0,<2019.3"
 
 REQUIREMENTS = [
     "numpy",
-    "fenics-ffc{}".format(RESTRICT_REQUIREMENTS),
+    "mpi4py",
+    "petsc4py",
+    "fenics-ffc",
     "fenics-ufl{}".format(RESTRICT_REQUIREMENTS),
-    "fenics-dijitso{}".format(RESTRICT_REQUIREMENTS),
 ]
+
 
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=''):
@@ -34,8 +36,8 @@ class CMakeBuild(build_ext):
         try:
             out = subprocess.check_output(['cmake', '--version'])
         except OSError:
-            raise RuntimeError("CMake must be installed to build the following extensions: " +
-                               ", ".join(e.name for e in self.extensions))
+            raise RuntimeError("CMake must be installed to build the following extensions: "
+                               + ", ".join(e.name for e in self.extensions))
 
         if platform.system() == "Windows":
             cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)', out.decode()).group(1))
@@ -86,9 +88,7 @@ setup(name='fenics-dolfin',
                 "dolfin.function",
                 "dolfin.fem",
                 "dolfin.la",
-                "dolfin.jit",
                 "dolfin_utils.test"],
-      package_dir={'dolfin' : 'dolfin', 'dolfin_test' : 'dolfin_test'},
       ext_modules=[CMakeExtension('dolfin.cpp')],
       cmdclass=dict(build_ext=CMakeBuild),
       install_requires=REQUIREMENTS,

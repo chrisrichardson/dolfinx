@@ -5,19 +5,19 @@
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 
 import sys
+from math import sqrt
 
 import numpy
 import pytest
 
 import dolfin
 import FIAT
-from math import sqrt
-from dolfin import (MPI, RectangleMesh, BoxMesh, UnitIntervalMesh,
-                    UnitSquareMesh, UnitCubeMesh, CellType, Vertex,
-                    Point, Cell, Cells, MeshFunction,
-                    MeshEntity, MeshEntities, cpp)
-from dolfin.io import XDMFFile
-from dolfin_utils.test import cd_tempdir, fixture, skip_in_parallel  # noqa
+from dolfin import (MPI, BoxMesh, Cell, Cells, CellType, MeshEntities,
+                    MeshEntity, MeshFunction, RectangleMesh,
+                    UnitCubeMesh, UnitIntervalMesh, UnitSquareMesh,
+                    cpp)
+from dolfin_utils.test.fixtures import fixture
+from dolfin_utils.test.skips import skip_in_parallel
 
 
 @fixture
@@ -31,10 +31,11 @@ def mesh1d():
 @fixture
 def mesh2d():
     # Create 2D mesh with one equilateral triangle
-    mesh2d = RectangleMesh.create(
-        MPI.comm_world, [Point(0, 0), Point(1, 1)], [1, 1],
+    mesh2d = RectangleMesh(
+        MPI.comm_world, [numpy.array([0.0, 0.0, 0.0]),
+                         numpy.array([1., 1., 0.0])], [1, 1],
         CellType.Type.triangle, cpp.mesh.GhostMode.none, 'left')
-    mesh2d.geometry.points[3] += 0.5 * (sqrt(3.0) - 1.0)
+    mesh2d.geometry.points[3, :2] += 0.5 * (sqrt(3.0) - 1.0)
     return mesh2d
 
 
@@ -77,8 +78,9 @@ def square():
 
 @fixture
 def rectangle():
-    return RectangleMesh.create(
-        MPI.comm_world, [Point(0, 0), Point(2, 2)], [5, 5],
+    return RectangleMesh(
+        MPI.comm_world, [numpy.array([0.0, 0.0, 0.0]),
+                         numpy.array([2.0, 2.0, 0.0])], [5, 5],
         CellType.Type.triangle, cpp.mesh.GhostMode.none)
 
 
@@ -89,9 +91,9 @@ def cube():
 
 @fixture
 def box():
-    return BoxMesh.create(MPI.comm_world,
-                          [Point(0, 0, 0), Point(2, 2, 2)], [2, 2, 5],
-                          CellType.Type.tetrahedron, cpp.mesh.GhostMode.none)
+    return BoxMesh(MPI.comm_world, [numpy.array([0, 0, 0]),
+                                    numpy.array([2, 2, 2])], [2, 2, 5], CellType.Type.tetrahedron,
+                   cpp.mesh.GhostMode.none)
 
 
 @fixture
@@ -114,13 +116,12 @@ def test_UFLCell(interval, square, rectangle, cube, box):
 
 
 def test_UFLDomain(interval, square, rectangle, cube, box):
-
     def _check_ufl_domain(mesh):
         domain = mesh.ufl_domain()
         assert mesh.geometry.dim == domain.geometric_dimension()
         assert mesh.topology.dim == domain.topological_dimension()
         assert mesh.ufl_cell() == domain.ufl_cell()
-        assert mesh.id() == domain.ufl_id()
+        assert mesh.id == domain.ufl_id()
 
     _check_ufl_domain(interval)
     _check_ufl_domain(square)
@@ -131,7 +132,8 @@ def test_UFLDomain(interval, square, rectangle, cube, box):
 
 # pygmsh is problematic in parallel because it uses subprocess to call
 # gmsh. To be robust, it would need to call MPI 'spawn'.
-@pytest.mark.skip(reason="pymsh calling gmsh fails in container (related to file creation)")
+@pytest.mark.skip(
+    reason="pymsh calling gmsh fails in container (related to file creation)")
 @skip_in_parallel
 def test_mesh_construction_pygmsh():
 
@@ -140,7 +142,8 @@ def test_mesh_construction_pygmsh():
     if MPI.rank(MPI.comm_world) == 0:
         geom = pygmsh.opencascade.Geometry()
         geom.add_ball([0.0, 0.0, 0.0], 1.0, char_length=0.2)
-        points, cells, _, _, _ = pygmsh.generate_mesh(geom)
+        pygmsh_mesh = pygmsh.generate_mesh(geom)
+        points, cells = pygmsh_mesh.points, pygmsh_mesh.cells
     else:
         points = numpy.zeros([0, 3])
         cells = {
@@ -174,7 +177,9 @@ def test_mesh_construction_pygmsh():
         print("Generate mesh")
         geom = pygmsh.opencascade.Geometry()
         geom.add_ball([0.0, 0.0, 0.0], 1.0, char_length=0.2)
-        points, cells, _, _, _ = pygmsh.generate_mesh(geom, extra_gmsh_arguments=['-order', '2'])
+        pygmsh_mesh = pygmsh.generate_mesh(
+            geom, extra_gmsh_arguments=['-order', '2'])
+        points, cells = pygmsh_mesh.points, pygmsh_mesh.cells
         print("End Generate mesh", cells.keys())
     else:
         points = numpy.zeros([0, 3])
@@ -210,7 +215,7 @@ def test_UnitSquareMeshDistributed():
 def test_UnitSquareMeshLocal():
     """Create mesh of unit square."""
     mesh = UnitSquareMesh(MPI.comm_self, 5, 7)
-    assert mesh.num_vertices() == 48
+    assert mesh.num_entities(0) == 48
     assert mesh.num_cells() == 70
     assert mesh.geometry.dim == 2
 
@@ -226,7 +231,7 @@ def test_UnitCubeMeshDistributed():
 def test_UnitCubeMeshLocal():
     """Create mesh of unit cube."""
     mesh = UnitCubeMesh(MPI.comm_self, 5, 7, 9)
-    assert mesh.num_vertices() == 480
+    assert mesh.num_entities(0) == 480
     assert mesh.num_cells() == 1890
     assert mesh.geometry.dim == 3
 
@@ -243,25 +248,6 @@ def test_UnitHexMesh():
     assert mesh.num_entities_global(0) == 480
     assert mesh.num_entities_global(3) == 315
     assert mesh.geometry.dim == 3
-
-
-@skip_in_parallel
-def test_Assign(mesh, f):
-    """Assign value of mesh function."""
-    f = f
-    f[3] = 10
-    v = Vertex(mesh, 3)
-    assert f[v] == 10
-
-
-@skip_in_parallel  # noqa
-def test_Write(cd_tempdir, f):
-    """Construct and save a simple meshfunction."""
-    f = f
-    f[0] = 1
-    f[1] = 2
-    file = XDMFFile(f.mesh().mpi_comm(), "saved_mesh_function.xdmf")
-    file.write(f)
 
 
 def test_hash():
@@ -340,10 +326,7 @@ def test_rmin_rmax(mesh1d, mesh2d, mesh3d):
 # - Facilities to run tests on combination of meshes
 
 mesh_factories = [
-    (UnitIntervalMesh, (
-        MPI.comm_world,
-        8,
-    )),
+    (UnitIntervalMesh, (MPI.comm_world, 8)),
     (UnitSquareMesh, (MPI.comm_world, 4, 4)),
     (UnitCubeMesh, (MPI.comm_world, 2, 2, 2)),
     (UnitSquareMesh, (MPI.comm_world, 4, 4, CellType.Type.quadrilateral)),
@@ -386,7 +369,7 @@ def test_shared_entities(mesh_factory):
     # FIXME: Implement a proper test
     for shared_dim in range(dim + 1):
         # Initialise global indices (if not already)
-        mesh.init_global(shared_dim)
+        mesh.create_global_indices(shared_dim)
 
         assert isinstance(mesh.topology.shared_entities(shared_dim), dict)
         assert isinstance(
@@ -409,23 +392,26 @@ def test_shared_entities(mesh_factory):
         assert num_entities_global == mesh.num_entities_global(shared_dim)
 
 
-# Skipping test after removing mesh.order()
-@pytest.mark.skip
 @pytest.mark.parametrize('mesh_factory', mesh_factories)
-def test_mesh_topology_against_fiat(mesh_factory, ghost_mode):
+def test_mesh_topology_against_fiat(mesh_factory, ghost_mode=cpp.mesh.GhostMode.none):
     """Test that mesh cells have topology matching to FIAT reference
     cell they were created from.
     """
     func, args = mesh_factory
     xfail_ghosted_quads_hexes(func, ghost_mode)
     mesh = func(*args)
+    if not mesh.type().is_simplex:
+        return
+
+    # Order mesh
+    cpp.mesh.Ordering.order_simplex(mesh)
 
     # Create FIAT cell
-    cell_name = CellType.type2string(mesh.type().cell_type())
+    cell_name = CellType.type2string(mesh.type().type)
     fiat_cell = FIAT.ufc_cell(cell_name)
 
     # Initialize all mesh entities and connectivities
-    mesh.init()
+    mesh.create_connectivity_all()
 
     for cell in Cells(mesh):
         # Get mesh-global (MPI-local) indices of cell vertices
@@ -442,25 +428,16 @@ def test_mesh_topology_against_fiat(mesh_factory, ghost_mode):
             # Loop over all entities of fixed dimension d
             for entity_index, entity_topology in d_topology.items():
 
-                # Check that entity vertices map to cell vertices in right order
+                # Check that entity vertices map to cell vertices in correct order
                 entity = MeshEntity(mesh, d, entities[entity_index])
                 entity_vertices = entity.entities(0)
                 assert all(vertex_global_indices[numpy.array(entity_topology)]
                            == entity_vertices)
 
 
-def test_mesh_topology_reference():
-    """Check that Mesh.topology returns a reference rather
-    than copy"""
-    mesh = UnitSquareMesh(MPI.comm_world, 4, 4)
-    assert mesh.topology.id() == mesh.topology.id()
-
-
 def test_mesh_topology_lifetime():
-    """Check that lifetime of Mesh.topology is bound to
-    underlying mesh object"""
+    """Check that lifetime of Mesh.topology is bound to underlying mesh object"""
     mesh = UnitSquareMesh(MPI.comm_world, 4, 4)
-
     rc = sys.getrefcount(mesh)
     topology = mesh.topology
     assert sys.getrefcount(mesh) == rc + 1
@@ -468,24 +445,17 @@ def test_mesh_topology_lifetime():
     assert sys.getrefcount(mesh) == rc
 
 
-def test_mesh_connectivity_lifetime():
-    """Check that lifetime of MeshConnectivity is bound to
-    underlying mesh topology object"""
-    mesh = UnitSquareMesh(MPI.comm_world, 4, 4)
-    mesh.init(1, 2)
-    topology = mesh.topology
+@pytest.mark.xfail(condition=MPI.size(MPI.comm_world) > 1,
+                   reason="Small meshes fail in parallel")
+def test_small_mesh(interval):
+    mesh3d = UnitCubeMesh(MPI.comm_world, 1, 1, 1)
+    gdim = mesh3d.geometry.dim
+    assert mesh3d.num_entities_global(gdim) == 6
 
-    # Refcount checks on the MeshConnectivity object
-    rc = sys.getrefcount(topology)
-    connectivity = topology.connectivity(1, 2)
-    assert sys.getrefcount(topology) == rc + 1
-    del connectivity
-    assert sys.getrefcount(topology) == rc
+    mesh2d = UnitSquareMesh(MPI.comm_world, 1, 1)
+    gdim = mesh2d.geometry.dim
+    assert mesh2d.num_entities_global(gdim) == 2
 
-    # Refcount checks on the returned connectivities array
-    conn = topology.connectivity(1, 2)
-    rc = sys.getrefcount(conn)
-    cells = conn(0)
-    assert sys.getrefcount(conn) == rc + 1
-    del cells
-    assert sys.getrefcount(conn) == rc
+    mesh1d = UnitIntervalMesh(MPI.comm_world, 2)
+    gdim = mesh1d.geometry.dim
+    assert mesh1d.num_entities_global(gdim) == 2

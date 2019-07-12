@@ -7,31 +7,35 @@
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 
 import pytest
-from dolfin import (UnitCubeMesh, UnitSquareMesh, FunctionSpace, MPI, Expression, interpolate, Function,
-                    VectorElement, FiniteElement, MixedElement, VectorFunctionSpace)
+
+from dolfin import (MPI, Function, FunctionSpace, UnitCubeMesh, UnitSquareMesh,
+                    VectorFunctionSpace, interpolate)
 from dolfin.cpp.fem import PETScDMCollection
-from dolfin.cpp.la import Norm
+from ufl import FiniteElement, MixedElement, VectorElement
 
 
 def test_scalar_p1():
     meshc = UnitCubeMesh(MPI.comm_world, 2, 2, 2)
     meshf = UnitCubeMesh(MPI.comm_world, 3, 4, 5)
 
-    Vc = FunctionSpace(meshc, "CG", 1)
-    Vf = FunctionSpace(meshf, "CG", 1)
+    Vc = FunctionSpace(meshc, ("CG", 1))
+    Vf = FunctionSpace(meshf, ("CG", 1))
 
-    u = Expression("x[0] + 2*x[1] + 3*x[2]", degree=1)
+    def u(values, x):
+        values[:, 0] = x[:, 0] + 2.0 * x[:, 1] + 3.0 * x[:, 2]
+
     uc = interpolate(u, Vc)
     uf = interpolate(u, Vf)
 
-    mat = PETScDMCollection.create_transfer_matrix(Vc, Vf).mat()
+    mat = PETScDMCollection.create_transfer_matrix(Vc._cpp_object,
+                                                   Vf._cpp_object)
     Vuc = Function(Vf)
-    mat.mult(uc.vector().vec(), Vuc.vector().vec())
+    mat.mult(uc.vector(), Vuc.vector())
 
     diff = Vuc.vector()
-    diff.vec().axpy(-1, uf.vector().vec())
+    diff.axpy(-1, uf.vector())
 
-    assert diff.norm(Norm.l2) < 1.0e-12
+    assert diff.norm() < 1.0e-12
 
 
 def test_scalar_p1_scaled_mesh():
@@ -41,116 +45,136 @@ def test_scalar_p1_scaled_mesh():
 
     meshf = UnitCubeMesh(MPI.comm_world, 3, 4, 5)
 
-    Vc = FunctionSpace(meshc, "CG", 1)
-    Vf = FunctionSpace(meshf, "CG", 1)
+    Vc = FunctionSpace(meshc, ("CG", 1))
+    Vf = FunctionSpace(meshf, ("CG", 1))
 
-    u = Expression("x[0] + 2*x[1] + 3*x[2]", degree=1)
+    def u(values, x):
+        values[:, 0] = x[:, 0] + 2.0 * x[:, 1] + 3.0 * x[:, 2]
+
     uc = interpolate(u, Vc)
     uf = interpolate(u, Vf)
 
-    mat = PETScDMCollection.create_transfer_matrix(Vc, Vf).mat()
+    mat = PETScDMCollection.create_transfer_matrix(Vc._cpp_object,
+                                                   Vf._cpp_object)
     Vuc = Function(Vf)
-    mat.mult(uc.vector().vec(), Vuc.vector().vec())
+    mat.mult(uc.vector(), Vuc.vector())
 
     diff = Vuc.vector()
-    diff.vec().axpy(-1, uf.vector().vec())
+    diff.axpy(-1, uf.vector())
 
-    assert diff.norm(Norm.l2) < 1.0e-12
+    assert diff.norm() < 1.0e-12
 
     # Now make coarse mesh larger than fine mesh
     meshc.geometry.points *= 1.5
 
     uc = interpolate(u, Vc)
 
-    mat = PETScDMCollection.create_transfer_matrix(Vc, Vf).mat()
-    mat.mult(uc.vector().vec(), Vuc.vector().vec())
+    mat = PETScDMCollection.create_transfer_matrix(Vc._cpp_object,
+                                                   Vf._cpp_object)
+    mat.mult(uc.vector(), Vuc.vector())
 
     diff = Vuc.vector()
-    diff.vec().axpy(-1, uf.vector().vec())
+    diff.axpy(-1, uf.vector())
 
-    assert diff.norm(Norm.l2) < 1.0e-12
+    assert diff.norm() < 1.0e-12
 
 
 def test_scalar_p2():
     meshc = UnitCubeMesh(MPI.comm_world, 2, 2, 2)
     meshf = UnitCubeMesh(MPI.comm_world, 3, 4, 5)
 
-    Vc = FunctionSpace(meshc, "CG", 2)
-    Vf = FunctionSpace(meshf, "CG", 2)
+    Vc = FunctionSpace(meshc, ("CG", 2))
+    Vf = FunctionSpace(meshf, ("CG", 2))
 
-    u = Expression("x[0]*x[2] + 2*x[1]*x[0] + 3*x[2]", degree=2)
+    def u(values, x):
+        values[:, 0] = x[:, 0] + 2.0 * x[:, 1] + 3.0 * x[:, 2]
+
     uc = interpolate(u, Vc)
     uf = interpolate(u, Vf)
 
-    mat = PETScDMCollection.create_transfer_matrix(Vc, Vf).mat()
+    mat = PETScDMCollection.create_transfer_matrix(Vc._cpp_object,
+                                                   Vf._cpp_object)
     Vuc = Function(Vf)
-    mat.mult(uc.vector().vec(), Vuc.vector().vec())
+    mat.mult(uc.vector(), Vuc.vector())
 
     diff = Vuc.vector()
-    diff.vec().axpy(-1, uf.vector().vec())
+    diff.axpy(-1, uf.vector())
 
-    assert diff.norm(Norm.l2) < 1.0e-12
+    assert diff.norm() < 1.0e-12
 
 
 def test_vector_p1_2d():
     meshc = UnitSquareMesh(MPI.comm_world, 5, 4)
     meshf = UnitSquareMesh(MPI.comm_world, 7, 8)
 
-    Vc = VectorFunctionSpace(meshc, "CG", 1)
-    Vf = VectorFunctionSpace(meshf, "CG", 1)
+    Vc = VectorFunctionSpace(meshc, ("CG", 1))
+    Vf = VectorFunctionSpace(meshf, ("CG", 1))
 
-    u = Expression(("x[0] + 2*x[1]", "4*x[0]"), degree=1)
+    def u(values, x):
+        values[:, 0] = x[:, 0] + 2.0 * x[:, 1]
+        values[:, 1] = 4.0 * x[:, 0]
+
     uc = interpolate(u, Vc)
     uf = interpolate(u, Vf)
 
-    mat = PETScDMCollection.create_transfer_matrix(Vc, Vf).mat()
+    mat = PETScDMCollection.create_transfer_matrix(Vc._cpp_object,
+                                                   Vf._cpp_object)
 
     Vuc = Function(Vf)
-    mat.mult(uc.vector().vec(), Vuc.vector().vec())
+    mat.mult(uc.vector(), Vuc.vector())
 
     diff = Vuc.vector()
-    diff.vec().axpy(-1, uf.vector().vec())
-    assert diff.norm(Norm.l2) < 1.0e-12
+    diff.axpy(-1, uf.vector())
+    assert diff.norm() < 1.0e-12
 
 
 def test_vector_p2_2d():
     meshc = UnitSquareMesh(MPI.comm_world, 5, 4)
     meshf = UnitSquareMesh(MPI.comm_world, 5, 8)
 
-    Vc = VectorFunctionSpace(meshc, "CG", 2)
-    Vf = VectorFunctionSpace(meshf, "CG", 2)
+    Vc = VectorFunctionSpace(meshc, ("CG", 2))
+    Vf = VectorFunctionSpace(meshf, ("CG", 2))
 
-    u = Expression(("x[0] + 2*x[1]*x[0]", "4*x[0]*x[1]"), degree=2)
+    def u(values, x):
+        values[:, 0] = x[:, 0] + 2.0 * x[:, 1]
+        values[:, 1] = 4.0 * x[:, 0] * x[:, 1]
+
     uc = interpolate(u, Vc)
     uf = interpolate(u, Vf)
 
-    mat = PETScDMCollection.create_transfer_matrix(Vc, Vf).mat()
+    mat = PETScDMCollection.create_transfer_matrix(Vc._cpp_object,
+                                                   Vf._cpp_object)
     Vuc = Function(Vf)
-    mat.mult(uc.vector().vec(), Vuc.vector().vec())
+    mat.mult(uc.vector(), Vuc.vector())
 
     diff = Vuc.vector()
-    diff.vec().axpy(-1, uf.vector().vec())
-    assert diff.norm(Norm.l2) < 1.0e-12
+    diff.axpy(-1, uf.vector())
+    assert diff.norm() < 1.0e-12
 
 
 def test_vector_p1_3d():
     meshc = UnitCubeMesh(MPI.comm_world, 2, 3, 4)
     meshf = UnitCubeMesh(MPI.comm_world, 3, 4, 5)
 
-    Vc = VectorFunctionSpace(meshc, "CG", 1)
-    Vf = VectorFunctionSpace(meshf, "CG", 1)
+    Vc = VectorFunctionSpace(meshc, ("CG", 1))
+    Vf = VectorFunctionSpace(meshf, ("CG", 1))
 
-    u = Expression(("x[0] + 2*x[1]", "4*x[0]", "3*x[2] + x[0]"), degree=1)
+    def u(values, x):
+        values[:, 0] = x[:, 0] + 2.0 * x[:, 1]
+        values[:, 1] = 4.0 * x[:, 0]
+        values[:, 2] = 3.0 * x[:, 2] + x[:, 0]
+
     uc = interpolate(u, Vc)
     uf = interpolate(u, Vf)
 
-    mat = PETScDMCollection.create_transfer_matrix(Vc, Vf).mat()
+    mat = PETScDMCollection.create_transfer_matrix(Vc._cpp_object,
+                                                   Vf._cpp_object)
     Vuc = Function(Vf)
-    mat.mult(uc.vector().vec(), Vuc.vector().vec())
+    mat.mult(uc.vector(), Vuc.vector())
 
     diff = Vuc.vector()
-    diff.vec().axpy(-1, uf.vector().vec())
-    assert diff.norm(Norm.l2) < 1.0e-12
+    diff.axpy(-1, uf.vector())
+    assert diff.norm() < 1.0e-12
 
 
 @pytest.mark.xfail
@@ -166,7 +190,12 @@ def test_taylor_hood_cube():
     Zc = FunctionSpace(meshc, Ze)
     Zf = FunctionSpace(meshf, Ze)
 
-    z = Expression(("x[0]*x[1]", "x[1]*x[2]", "x[2]*x[0]", "x[0] + 3*x[1] + x[2]"), degree=2)
+    def z(values, x):
+        values[:, 0] = x[:, 0] * x[:, 1]
+        values[:, 1] = x[:, 1] * x[:, 2]
+        values[:, 2] = x[:, 2] * x[:, 0]
+        values[:, 3] = x[:, 0] + 3.0 * x[:, 1] + x[:, 2]
+
     zc = interpolate(z, Zc)
     zf = interpolate(z, Zf)
 

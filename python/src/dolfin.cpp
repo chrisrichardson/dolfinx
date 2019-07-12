@@ -4,7 +4,6 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include <dolfin/log/log.h>
 #include <iostream>
 #include <pybind11/pybind11.h>
 
@@ -26,7 +25,6 @@ void la(py::module& m);
 void math(py::module& m);
 void mesh(py::module& m);
 void nls(py::module& m);
-void parameter(py::module& m);
 void refinement(py::module& m);
 } // namespace dolfin_wrappers
 
@@ -88,14 +86,7 @@ PYBIND11_MODULE(cpp, m)
   py::module nls = m.def_submodule("nls", "Nonlinear solver module");
   dolfin_wrappers::nls(nls);
 
-  // Create parameter submodule
-  py::module parameter = m.def_submodule("parameter", "Parameter module");
-  dolfin_wrappers::parameter(parameter);
-
   // Create refinement submodule
   py::module refinement = m.def_submodule("refinement", "Refinement module");
   dolfin_wrappers::refinement(refinement);
-
-  // FIXME: these are just for the transition
-  m.def("warning", [](std::string message) { dolfin::log::warning(message); });
 }

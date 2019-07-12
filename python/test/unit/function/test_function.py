@@ -1,21 +1,24 @@
-"""Unit tests for the Function class"""
-
 # Copyright (C) 2011-2014 Garth N. Wells
 #
 # This file is part of DOLFIN (https://www.fenicsproject.org)
 #
 # SPDX-License-Identifier:    LGPL-3.0-or-later
+"""Unit tests for the Function class"""
 
+import importlib
+import math
+
+import cffi
+import numpy as np
 import pytest
-from dolfin import (UnitCubeMesh,
-                    FunctionSpace, VectorFunctionSpace, TensorFunctionSpace,
-                    Constant, MPI, Point, Function,
-                    UserExpression, interpolate, Expression, DOLFIN_EPS, Vertex, lt, cpp)
-from math import sqrt
-import numpy
-import ufl
+from dolfin_utils.test.fixtures import fixture
+from dolfin_utils.test.skips import skip_if_complex, skip_in_parallel
+from petsc4py import PETSc
 
-from dolfin_utils.test import skip_in_parallel, fixture, skip_if_complex
+import ufl
+from dolfin import (MPI, Function, FunctionSpace, TensorFunctionSpace,
+                    UnitCubeMesh, VectorFunctionSpace, Vertex, cpp,
+                    interpolate)
 
 
 @fixture
@@ -25,60 +28,51 @@ def mesh():
 
 @fixture
 def R(mesh):
-    return FunctionSpace(mesh, 'R', 0)
+    return FunctionSpace(mesh, ('R', 0))
 
 
 @fixture
 def V(mesh):
-    return FunctionSpace(mesh, 'CG', 1)
+    return FunctionSpace(mesh, ('CG', 1))
 
 
 @fixture
 def W(mesh):
-    return VectorFunctionSpace(mesh, 'CG', 1)
+    return VectorFunctionSpace(mesh, ('CG', 1))
 
 
 @fixture
 def Q(mesh):
-    return TensorFunctionSpace(mesh, 'CG', 1)
+    return TensorFunctionSpace(mesh, ('CG', 1))
 
 
 def test_name_argument(W):
     u = Function(W)
     v = Function(W, name="v")
-    assert u.name() == "f_%d" % u.count()
-    assert v.name() == "v"
+    assert u.name == "f_{}".format(u.count())
+    assert v.name == "v"
     assert str(v) == "v"
 
 
 def test_compute_point_values(V, W, mesh):
-    from numpy import all
     u = Function(V)
     v = Function(W)
-
-    u.vector()[:] = 1.
-    v.vector()[:] = 1.
-
-    u.vector().update_ghosts()
-    v.vector().update_ghosts()
-
+    with u.vector().localForm() as u_local, v.vector().localForm() as v_local:
+        u_local.set(1.0)
+        v_local.set(1.0)
     u_values = u.compute_point_values(mesh)
     v_values = v.compute_point_values(mesh)
 
-    u_ones = numpy.ones_like(u_values, dtype=numpy.float64)
-    assert all(numpy.isclose(u_values, u_ones))
-
-    v_ones = numpy.ones_like(v_values, dtype=numpy.float64)
-    assert all(numpy.isclose(v_values, v_ones))
-
+    u_ones = np.ones_like(u_values, dtype=np.float64)
+    assert np.all(np.isclose(u_values, u_ones))
+    v_ones = np.ones_like(v_values, dtype=np.float64)
+    assert np.all(np.isclose(v_values, v_ones))
     u_values2 = u.compute_point_values()
-
     assert all(u_values == u_values2)
 
 
 @pytest.mark.skip
 def test_assign(V, W):
-
     for V0, V1, vector_space in [(V, W, False), (W, V, True)]:
         u = Function(V0)
         u0 = Function(V0)
@@ -104,37 +98,28 @@ def test_assign(V, W):
         expr = 3 * u - 4 * u1 - 0.1 * 4 * u * 4 + u2 + 3 * u0 / 3. / 0.5
         expr_scalar = 3 - 4 * 3 - 0.1 * 4 * 4 + 4. + 3 * 2. / 3. / 0.5
         uu.assign(expr)
-        assert (round(uu.vector().get_local().sum() -
-                      float(expr_scalar * uu.vector().size()), 7) == 0)
-
-        # Test expression scaling
-        expr = 3 * expr
-        expr_scalar *= 3
-        uu.assign(expr)
-        assert (round(uu.vector().get_local().sum() -
-                      float(expr_scalar * uu.vector().size()), 7) == 0)
-
-        # Test expression scaling
-        expr = expr / 4.5
-        expr_scalar /= 4.5
-        uu.assign(expr)
-        assert (round(uu.vector().get_local().sum() -
-                      float(expr_scalar * uu.vector().size()), 7) == 0)
+        assert (round(
+            uu.vector().get_local().sum() - float(
+                expr_scalar * uu.vector().size()), 7) == 0)
 
         # Test self assignment
-        expr = 3 * u - Constant(5) * u2 + u1 - 5 * u
+        expr = 3 * u - 5.0 * u2 + u1 - 5 * u
         expr_scalar = 3 - 5 * 4. + 3. - 5
         u.assign(expr)
-        assert (round(u.vector().get_local().sum() -
-                      float(expr_scalar * u.vector().size()), 7) == 0)
+        assert (round(
+            u.vector().get_local().sum() - float(
+                expr_scalar * u.vector().size()), 7) == 0)
 
         # Test zero assignment
         u.assign(-u2 / 2 + 2 * u1 - u1 / 0.5 + u2 * 0.5)
         assert round(u.vector().get_local().sum() - 0.0, 7) == 0
 
-        # Test errounious assignments
+        # Test erroneous assignments
         uu = Function(V1)
-        f = Expression("1.0", degree=0)
+
+        def f(values, x):
+            values[:, 0] = 1.0
+
         with pytest.raises(RuntimeError):
             uu.assign(1.0)
         with pytest.raises(RuntimeError):
@@ -150,59 +135,67 @@ def test_assign(V, W):
 
 
 def test_call(R, V, W, Q, mesh):
-    from numpy import all, allclose
     u0 = Function(R)
     u1 = Function(V)
     u2 = Function(W)
     u3 = Function(Q)
 
-    e0 = Expression("x[0] + x[1] + x[2]", degree=1)
-    e1 = Expression(
-        ("x[0] + x[1] + x[2]", "x[0] - x[1] - x[2]", "x[0] + x[1] + x[2]"),
-        degree=1)
-    e2 = Expression(
-        (("x[0] + x[1] + x[2]", "x[0] - x[1] - x[2]", "x[0] + x[1] + x[2]"),
-         ("x[0]", "x[1]", "x[2]"),
-         ("-x[0]", "-x[1]", "-x[2]")),
-        degree=1)
+    def e1(values, x):
+        values[:, 0] = x[:, 0] + x[:, 1] + x[:, 2]
 
-    u0.vector()[:] = 1.0
-    u1.interpolate(e0)
-    u2.interpolate(e1)
-    u3.interpolate(e2)
+    def e2(values, x):
+        values[:, 0] = x[:, 0] + x[:, 1] + x[:, 2]
+        values[:, 1] = x[:, 0] - x[:, 1] - x[:, 2]
+        values[:, 2] = x[:, 0] + x[:, 1] + x[:, 2]
 
-    p0 = ((Vertex(mesh, 0).point() + Vertex(mesh, 1).point()) / 2.0).array()
+    def e3(values, x):
+        values[:, 0] = x[:, 0] + x[:, 1] + x[:, 2]
+        values[:, 1] = x[:, 0] - x[:, 1] - x[:, 2]
+        values[:, 2] = x[:, 0] + x[:, 1] + x[:, 2]
+        values[:, 3] = x[:, 0]
+        values[:, 4] = x[:, 1]
+        values[:, 5] = x[:, 2]
+        values[:, 6] = -x[:, 0]
+        values[:, 7] = -x[:, 1]
+        values[:, 8] = -x[:, 2]
+
+    u0.vector().set(1.0)
+    u1.interpolate(e1)
+    u2.interpolate(e2)
+    u3.interpolate(e3)
+
+    p0 = ((Vertex(mesh, 0).point() + Vertex(mesh, 1).point()) / 2.0)
     x0 = (mesh.geometry.x(0) + mesh.geometry.x(1)) / 2.0
 
-    assert round(u0(x0)[0] - u0(x0)[0], 7) == 0
-    assert round(u0(x0)[0] - u0(p0)[0], 7) == 0
-    assert round(u1(x0)[0] - u1(x0)[0], 7) == 0
-    assert round(u1(x0)[0] - u1(p0)[0], 7) == 0
-    assert round(u2(x0)[0][0] - u1(p0)[0], 7) == 0
+    tree = cpp.geometry.BoundingBoxTree(mesh, mesh.geometry.dim)
 
-    assert all(u2(x0) == u2(x0))
-    assert all(u2(x0) == u2(p0))
-    assert allclose(u3(x0)[0][:3], u2(x0)[0], rtol=1e-15, atol=1e-15)
+    assert np.allclose(u0(x0, tree), u0(x0, tree))
+    assert np.allclose(u0(x0, tree), u0(p0, tree))
+    assert np.allclose(u1(x0, tree), u1(x0, tree))
+    assert np.allclose(u1(x0, tree), u1(p0, tree))
+    assert np.allclose(u2(x0, tree)[0], u1(p0, tree))
 
-    with pytest.raises(TypeError):
-        u0([0, 0, 0, 0])
-    with pytest.raises(TypeError):
-        u0([0, 0])
+    assert np.allclose(u2(x0, tree), u2(p0, tree))
+    assert np.allclose(u3(x0, tree)[:3], u2(x0, tree), rtol=1e-15, atol=1e-15)
 
+    p0_list = [p for p in p0]
+    x0_list = [x for x in x0]
+    assert np.allclose(u0(x0_list, tree), u0(x0_list, tree))
+    assert np.allclose(u0(x0_list, tree), u0(p0_list, tree))
 
-@skip_if_complex
-def test_constant_float_conversion():
-    c = Constant(3.45)
-    assert float(c.values()[0]) == 3.45
+    with pytest.raises(ValueError):
+        u0([0, 0, 0, 0], tree)
+    with pytest.raises(ValueError):
+        u0([0, 0], tree)
 
 
 def test_scalar_conditions(R):
     c = Function(R)
-    c.vector()[:] = 1.5
+    c.vector().set(1.5)
 
     # Float conversion does not interfere with boolean ufl expressions
-    assert isinstance(lt(c, 3), ufl.classes.LT)
-    assert not isinstance(lt(c, 3), bool)
+    assert isinstance(ufl.lt(c, 3), ufl.classes.LT)
+    assert not isinstance(ufl.lt(c, 3), bool)
 
     # Float conversion is not implicit in boolean Python expressions
     assert isinstance(c < 3, ufl.classes.LT)
@@ -221,75 +214,130 @@ def test_scalar_conditions(R):
         not c < 0
 
 
+@pytest.mark.skip
 def test_interpolation_mismatch_rank0(W):
-    f = Expression("1.0", degree=0)
+    def f(values, x):
+        values[:, 0] = 1.0
+
     with pytest.raises(RuntimeError):
         interpolate(f, W)
 
 
+@pytest.mark.skip
 def test_interpolation_mismatch_rank1(W):
-    f = Expression(("1.0", "1.0"), degree=0)
+    def f(values, x):
+        values[:, 0] = 1.0
+        values[:, 1] = 1.0
+
     with pytest.raises(RuntimeError):
         interpolate(f, W)
 
 
-def test_interpolation_jit_rank0(V):
-    f = Expression("1.0", degree=0)
-    w = interpolate(f, V)
-    x = w.vector()
-    assert MPI.max(MPI.comm_world, abs(x.get_local()).max()) == 1
-    assert MPI.min(MPI.comm_world, abs(x.get_local()).min()) == 1
+def test_interpolation_rank0(V):
+    class MyExpression:
+        def __init__(self):
+            self.t = 0.0
+
+        def eval(self, values, x):
+            values[:, 0] = self.t
+
+    f = MyExpression()
+    f.t = 1.0
+    w = interpolate(f.eval, V)
+    with w.vector().localForm() as x:
+        assert (x[:] == 1.0).all()
+    f.t = 2.0
+    w = interpolate(f.eval, V)
+    with w.vector().localForm() as x:
+        assert (x[:] == 2.0).all()
 
 
 @skip_in_parallel
 def test_near_evaluations(R, mesh):
     # Test that we allow point evaluation that are slightly outside
-
+    bb_tree = cpp.geometry.BoundingBoxTree(mesh, mesh.geometry.dim)
     u0 = Function(R)
-    u0.vector()[:] = 1.0
-    a = Vertex(mesh, 0).point().array()
-    offset = 0.99 * DOLFIN_EPS
+    u0.vector().set(1.0)
+    a = Vertex(mesh, 0).point()
+    offset = 0.99 * np.finfo(float).eps
 
-    a_shift_x = Point(a[0] - offset, a[1], a[2]).array()
-    assert round(u0(a)[0] - u0(a_shift_x)[0], 7) == 0
+    a_shift_x = np.array([a[0] - offset, a[1], a[2]])
+    assert round(u0(a, bb_tree)[0] - u0(a_shift_x, bb_tree)[0], 7) == 0
 
-    a_shift_xyz = Point(a[0] - offset / sqrt(3), a[1] - offset / sqrt(3),
-                        a[2] - offset / sqrt(3)).array()
-    assert round(u0(a)[0] - u0(a_shift_xyz)[0], 7) == 0
+    a_shift_xyz = np.array([a[0] - offset / math.sqrt(3),
+                            a[1] - offset / math.sqrt(3),
+                            a[2] - offset / math.sqrt(3)])
+    assert round(u0(a, bb_tree)[0] - u0(a_shift_xyz, bb_tree)[0], 7) == 0
 
 
-def test_interpolation_jit_rank1(W):
-    f = Expression(("1.0", "1.0", "1.0"), degree=0)
+def test_interpolation_rank1(W):
+    def f(values, x):
+        values[:, 0] = 1.0
+        values[:, 1] = 1.0
+        values[:, 2] = 1.0
+
     w = interpolate(f, W)
     x = w.vector()
-    assert abs(x.get_local()).max() == 1
-    assert abs(x.get_local()).min() == 1
+    assert x.max()[1] == 1.0
+    assert x.min()[1] == 1.0
 
 
 @skip_in_parallel
 def test_interpolation_old(V, W, mesh):
-    class F0(UserExpression):
-        def eval(self, values, x):
-            values[:, 0] = 1.0
+    def f0(values, x):
+        values[:, 0] = 1.0
 
-    class F1(UserExpression):
-        def eval(self, values, x):
-            values[:, 0] = 1.0
-            values[:, 1] = 1.0
-            values[:, 2] = 1.0
-
-        def value_shape(self):
-            return (3, )
+    def f1(values, x):
+        values[:, :] = 1.0
 
     # Scalar interpolation
-    f0 = F0(degree=0)
     f = Function(V)
-    f = interpolate(f0, V)
-    assert round(f.vector().norm(cpp.la.Norm.l1) - mesh.num_vertices(), 7) == 0
+    f.interpolate(f0)
+    assert round(f.vector().norm(PETSc.NormType.N1) - mesh.num_entities(0),
+                 7) == 0
 
     # Vector interpolation
-    f1 = F1(degree=0)
     f = Function(W)
     f.interpolate(f1)
-    assert round(f.vector().norm(cpp.la.Norm.l1) - 3 * mesh.num_vertices(),
+    assert round(f.vector().norm(PETSc.NormType.N1) - 3 * mesh.num_entities(0),
                  7) == 0
+
+
+@skip_if_complex
+def test_cffi_expression(V):
+    code_h = """
+    void eval(double* values, int num_points, int value_size, const double* x, int gdim);
+    """
+
+    code_c = """
+    void eval(double* values, int num_points, int value_size, const double* x, int gdim)
+    {
+      for (int i = 0; i < num_points; ++i)
+        values[i*value_size + 0] = x[i*gdim + 0] + x[i*gdim + 1];
+    }
+    """
+    module = "_expr_eval" + str(MPI.comm_world.rank)
+
+    # Build the kernel
+    ffi = cffi.FFI()
+    ffi.set_source(module, code_c)
+    ffi.cdef(code_h)
+    ffi.compile()
+
+    # Import the compiled kernel
+    kernel_mod = importlib.import_module(module)
+    ffi, lib = kernel_mod.ffi, kernel_mod.lib
+
+    # Get pointer to the compiled function
+    eval_ptr = ffi.cast("uintptr_t", ffi.addressof(lib, "eval"))
+
+    # Handle C func address by hand
+    f1 = Function(V)
+    f1.interpolate(int(eval_ptr))
+
+    def expr_eval2(values, x):
+        values[:, 0] = x[:, 0] + x[:, 1]
+
+    f2 = Function(V)
+    f2.interpolate(expr_eval2)
+    assert (f1.vector() - f2.vector()).norm() < 1.0e-12

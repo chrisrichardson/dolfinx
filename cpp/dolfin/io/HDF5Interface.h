@@ -13,7 +13,8 @@
 // Note: dolfin/common/MPI.h is included before hdf5.h to avoid the
 // MPICH_IGNORE_CXX_SEEK issue
 #include <dolfin/common/MPI.h>
-#include <dolfin/log/log.h>
+
+#include <dolfin/common/log.h>
 #include <hdf5.h>
 
 namespace dolfin
@@ -169,8 +170,8 @@ private:
   template <typename T>
   static hid_t hdf5_type()
   {
-    log::dolfin_error("HDF5Interface.cpp", "get HDF5 primitive data type",
-                      "No specialised function for this data type");
+    throw std::runtime_error("Cannot get HDF5 primitive data type. "
+                             "No specialised function for this data type");
     return 0;
   }
 };
@@ -207,9 +208,8 @@ inline hid_t HDF5Interface::hdf5_type<std::size_t>()
     return H5T_NATIVE_ULONG;
   else if (sizeof(std::size_t) == sizeof(unsigned int))
     return H5T_NATIVE_UINT;
-  else
-    log::dolfin_error("HDF5Interface.h", "determine size of std::size_t",
-                      "std::size_t is not the same size as long or int");
+  throw std::runtime_error("Cannot determine size of std::size_t. "
+                           "std::size_t is not the same size as long or int");
   return 0;
 }
 //---------------------------------------------------------------------------
@@ -225,8 +225,8 @@ inline void HDF5Interface::write_dataset(
 
   if (rank > 2)
   {
-    log::dolfin_error("HDF5Interface.cpp", "write dataset to HDF5 file",
-                      "Only rank 1 and rank 2 dataset are supported");
+    throw std::runtime_error("Cannot write dataset to HDF5 file"
+                             "Only rank 1 and rank 2 dataset are supported");
   }
 
   // Get HDF5 data type
@@ -247,7 +247,7 @@ inline void HDF5Interface::write_dataset(
   herr_t status;
 
   // Create a global data space
-  const hid_t filespace0 = H5Screate_simple(rank, dimsf.data(), NULL);
+  const hid_t filespace0 = H5Screate_simple(rank, dimsf.data(), nullptr);
   assert(filespace0 != HDF5_FAIL);
 
   // Set chunking parameters
@@ -283,13 +283,13 @@ inline void HDF5Interface::write_dataset(
   assert(status != HDF5_FAIL);
 
   // Create a local data space
-  const hid_t memspace = H5Screate_simple(rank, count.data(), NULL);
+  const hid_t memspace = H5Screate_simple(rank, count.data(), nullptr);
   assert(memspace != HDF5_FAIL);
 
   // Create a file dataspace within the global space - a hyperslab
   const hid_t filespace1 = H5Dget_space(dset_id);
-  status = H5Sselect_hyperslab(filespace1, H5S_SELECT_SET, offset.data(), NULL,
-                               count.data(), NULL);
+  status = H5Sselect_hyperslab(filespace1, H5S_SELECT_SET, offset.data(),
+                               nullptr, count.data(), nullptr);
   assert(status != HDF5_FAIL);
 
   // Set parallel access
@@ -300,8 +300,7 @@ inline void HDF5Interface::write_dataset(
     status = H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
     assert(status != HDF5_FAIL);
 #else
-    log::dolfin_error("HDF5Interface.h", "use MPI",
-                      "HDF5 library has not been configured with MPI");
+    throw std::runtime_error("HDF5 library has not been configured with MPI");
 #endif
   }
 
@@ -353,13 +352,13 @@ HDF5Interface::read_dataset(const hid_t file_handle,
   assert(rank >= 0);
 
   if (rank > 2)
-    log::warning("HDF5Interface::read_dataset untested for rank > 2.");
+    LOG(WARNING) << "HDF5Interface::read_dataset untested for rank > 2.";
 
   // Allocate data for shape
   std::vector<hsize_t> shape(rank);
 
   // Get size in each dimension
-  const int ndims = H5Sget_simple_extent_dims(dataspace, shape.data(), NULL);
+  const int ndims = H5Sget_simple_extent_dims(dataspace, shape.data(), nullptr);
   assert(ndims == rank);
 
   // Hyperslab selection
@@ -376,11 +375,11 @@ HDF5Interface::read_dataset(const hid_t file_handle,
   // Select a block in the dataset beginning at offset[], with
   // size=count[]
   herr_t status = H5Sselect_hyperslab(dataspace, H5S_SELECT_SET, offset.data(),
-                                      NULL, count.data(), NULL);
+                                      nullptr, count.data(), nullptr);
   assert(status != HDF5_FAIL);
 
   // Create a memory dataspace
-  const hid_t memspace = H5Screate_simple(rank, count.data(), NULL);
+  const hid_t memspace = H5Screate_simple(rank, count.data(), nullptr);
   assert(memspace != HDF5_FAIL);
 
   // Create local data to read into
@@ -521,7 +520,7 @@ HDF5Interface::add_attribute_value(const hid_t dset_id,
 
   // Create a vector dataspace
   const hsize_t dimsf = attribute_value.size();
-  const hid_t dataspace_id = H5Screate_simple(1, &dimsf, NULL);
+  const hid_t dataspace_id = H5Screate_simple(1, &dimsf, nullptr);
   assert(dataspace_id != HDF5_FAIL);
 
   // Create an attribute of type size_t in the dataspace
@@ -654,5 +653,5 @@ inline void HDF5Interface::get_attribute_value(const hid_t attr_type,
 }
 //---------------------------------------------------------------------------
 #endif
-}
-}
+} // namespace io
+} // namespace dolfin

@@ -1,32 +1,36 @@
 set(HEADERS
-  ArrayView.h
-  constants.h
   defines.h
   dolfin_common.h
   dolfin_doc.h
   IndexMap.h
   init.h
+  log.h
+  loguru.hpp
   MPI.h
-  RangedIndexSet.h
   Set.h
   SubSystemsManager.h
+  Table.h
   Timer.h
+  TimeLogger.h
+  TimeLogManager.h
   timing.h
   types.h
   UniqueIdGenerator.h
   utils.h
-  Variable.h
   PARENT_SCOPE)
 
 set(SOURCES
   defines.cpp
   IndexMap.cpp
   init.cpp
+  log.cpp
   MPI.cpp
   SubSystemsManager.cpp
+  Table.cpp
   Timer.cpp
+  TimeLogger.cpp
+  TimeLogManager.cpp
   timing.cpp
   UniqueIdGenerator.cpp
   utils.cpp
-  Variable.cpp
   PARENT_SCOPE)

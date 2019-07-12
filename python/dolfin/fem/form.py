@@ -5,10 +5,10 @@
 #
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 
-import ufl
+import cffi
 
-from dolfin import cpp
-from dolfin import jit
+import ufl
+from dolfin import cpp, fem, jit
 
 
 class Form(ufl.Form):
@@ -30,18 +30,6 @@ class Form(ufl.Form):
         """
         self.form_compiler_parameters = form_compiler_parameters
 
-        # Add DOLFIN include paths (just the Boost path for special
-        # math functions is really required)
-        # FIXME: move getting include paths to elsewhere
-        if self.form_compiler_parameters is None:
-            self.form_compiler_parameters = {
-                "external_include_dirs": jit.dolfin_pc["include_dirs"]
-            }
-        else:
-            # FIXME: add paths if dict entry already exists
-            self.form_compiler_parameters["external_include_dirs"] = jit.dolfin_pc[
-                "include_dirs"]
-
         # Extract subdomain data from UFL form
         sd = form.subdomain_data()
         self._subdomains, = list(sd.values())  # Assuming single domain
@@ -53,8 +41,10 @@ class Form(ufl.Form):
             form,
             form_compiler_parameters=self.form_compiler_parameters,
             mpi_comm=mesh.mpi_comm())
+
         # Cast compiled library to pointer to ufc_form
-        ufc_form = cpp.fem.make_ufc_form(ufc_form[0])
+        ffi = cffi.FFI()
+        ufc_form = fem.dofmap.make_ufc_form(ffi.cast("uintptr_t", ufc_form))
 
         # For every argument in form extract its function space
         function_spaces = [
@@ -62,7 +52,7 @@ class Form(ufl.Form):
         ]
 
         # Prepare dolfin.Form and hold it as a member
-        self._cpp_object = cpp.fem.Form(ufc_form, function_spaces)
+        self._cpp_object = cpp.fem.create_form(ufc_form, function_spaces)
 
         # Need to fill the form with coefficients data
         # For every coefficient in form take its CPP object
@@ -70,7 +60,7 @@ class Form(ufl.Form):
         for i in range(self._cpp_object.num_coefficients()):
             j = self._cpp_object.original_coefficient_position(i)
             self._cpp_object.set_coefficient(
-                j, original_coefficients[i].cpp_object())
+                i, original_coefficients[j]._cpp_object)
 
         if mesh is None:
             raise RuntimeError("Expecting to find a Mesh in the form.")
@@ -82,13 +72,17 @@ class Form(ufl.Form):
 
         # Attach subdomains to C++ Form if we have them
         subdomains = self._subdomains.get("cell")
-        self._cpp_object.set_cell_domains(subdomains)
+        if subdomains:
+            self._cpp_object.set_cell_domains(subdomains)
 
         subdomains = self._subdomains.get("exterior_facet")
-        self._cpp_object.set_exterior_facet_domains(subdomains)
+        if subdomains:
+            self._cpp_object.set_exterior_facet_domains(subdomains)
 
         subdomains = self._subdomains.get("interior_facet")
-        self._cpp_object.set_interior_facet_domains(subdomains)
+        if subdomains:
+            self._cpp_object.set_interior_facet_domains(subdomains)
 
         subdomains = self._subdomains.get("vertex")
-        self._cpp_object.set_vertex_domains(subdomains)
+        if subdomains:
+            self._cpp_object.set_vertex_domains(subdomains)

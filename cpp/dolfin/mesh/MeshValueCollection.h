@@ -10,8 +10,6 @@
 #include "Mesh.h"
 #include "MeshEntity.h"
 #include "MeshFunction.h"
-#include <dolfin/common/Variable.h>
-#include <dolfin/log/log.h>
 #include <map>
 #include <memory>
 #include <utility>
@@ -31,7 +29,7 @@ namespace mesh
 /// means that data may be stored robustly to file.
 
 template <typename T>
-class MeshValueCollection : public common::Variable
+class MeshValueCollection
 {
 public:
   /// Copy constructor
@@ -163,6 +161,9 @@ public:
   ///         An informal representation.
   std::string str(bool verbose) const;
 
+  /// Name
+  std::string name = "f";
+
 private:
   // Associated mesh
   std::shared_ptr<const Mesh> _mesh;
@@ -180,8 +181,7 @@ private:
 template <typename T>
 MeshValueCollection<T>::MeshValueCollection(std::shared_ptr<const Mesh> mesh,
                                             std::size_t dim)
-    : common::Variable("m"), _mesh(mesh),
-      _dim(dim)
+    : _mesh(mesh), _dim(dim)
 {
   // Do nothing
 }
@@ -189,29 +189,30 @@ MeshValueCollection<T>::MeshValueCollection(std::shared_ptr<const Mesh> mesh,
 template <typename T>
 MeshValueCollection<T>::MeshValueCollection(
     const MeshFunction<T>& mesh_function)
-    : common::Variable("m"),
-      _mesh(mesh_function.mesh()), _dim(mesh_function.dim())
+    : _mesh(mesh_function.mesh()), _dim(mesh_function.dim())
 {
   assert(_mesh);
   const std::size_t D = _mesh->topology().dim();
 
+  // Prefetch values of mesh function
+  Eigen::Ref<const Eigen::Array<T, Eigen::Dynamic, 1>> mf_values
+      = mesh_function.values();
+
   // Handle cells as a special case
   if ((int)D == _dim)
   {
-    for (std::size_t cell_index = 0; cell_index < mesh_function.size();
+    for (Eigen::Index cell_index = 0; cell_index < mf_values.size();
          ++cell_index)
     {
       const std::pair<std::size_t, std::size_t> key(cell_index, 0);
-      _values.insert({key, mesh_function[cell_index]});
+      _values.insert({key, mf_values[cell_index]});
     }
   }
   else
   {
-    _mesh->init(_dim, D);
-    const MeshConnectivity& connectivity
-        = _mesh->topology().connectivity(_dim, D);
-    assert(!connectivity.empty());
-    for (std::size_t entity_index = 0; entity_index < mesh_function.size();
+    _mesh->create_connectivity(_dim, D);
+    const Connectivity& connectivity = _mesh->topology().connectivity(_dim, D);
+    for (Eigen::Index entity_index = 0; entity_index < mf_values.size();
          ++entity_index)
     {
       // Find the cell
@@ -220,7 +221,8 @@ MeshValueCollection<T>::MeshValueCollection(
       for (std::size_t i = 0; i < entity.num_entities(D); ++i)
       {
         // Create cell
-        const mesh::Cell cell(*_mesh, connectivity(entity_index)[i]);
+        const mesh::Cell cell(*_mesh,
+                              connectivity.connections(entity_index)[i]);
 
         // Find the local entity index
         const std::size_t local_entity = cell.index(entity);
@@ -228,7 +230,7 @@ MeshValueCollection<T>::MeshValueCollection(
         // Insert into map
         const std::pair<std::size_t, std::size_t> key(cell.index(),
                                                       local_entity);
-        _values.insert({key, mesh_function[entity_index]});
+        _values.insert({key, mf_values[entity_index]});
       }
     }
   }
@@ -246,23 +248,26 @@ operator=(const MeshFunction<T>& mesh_function)
 
   // FIXME: Use iterators
 
+  // Prefetch values of mesh function
+  Eigen::Ref<const Eigen::Array<T, Eigen::Dynamic, 1>> mf_values
+      = mesh_function.values();
+
   // Handle cells as a special case
   if ((int)D == _dim)
   {
-    for (std::size_t cell_index = 0; cell_index < mesh_function.size();
+    for (Eigen::Index cell_index = 0; cell_index < mf_values.size();
          ++cell_index)
     {
       const std::pair<std::size_t, std::size_t> key(cell_index, 0);
-      _values.insert({key, mesh_function[cell_index]});
+      _values.insert({key, mf_values[cell_index]});
     }
   }
   else
   {
-    _mesh->init(_dim, D);
-    const MeshConnectivity& connectivity
-        = _mesh->topology().connectivity(_dim, D);
-    assert(!connectivity.empty());
-    for (std::size_t entity_index = 0; entity_index < mesh_function.size();
+    _mesh->create_connectivity(_dim, D);
+    assert(_mesh->topology().connectivity(_dim, D));
+    const Connectivity& connectivity = *_mesh->topology().connectivity(_dim, D);
+    for (Eigen::Index entity_index = 0; entity_index < mf_values.size();
          ++entity_index)
     {
       // Find the cell
@@ -271,7 +276,8 @@ operator=(const MeshFunction<T>& mesh_function)
       for (std::size_t i = 0; i < entity.num_entities(D); ++i)
       {
         // Create cell
-        const mesh::Cell cell(*_mesh, connectivity(entity_index)[i]);
+        const mesh::Cell cell(*_mesh,
+                              connectivity.connections(entity_index)[i]);
 
         // Find the local entity index
         const std::size_t local_entity = cell.index(entity);
@@ -279,7 +285,7 @@ operator=(const MeshFunction<T>& mesh_function)
         // Insert into map
         const std::pair<std::size_t, std::size_t> key(cell.index(),
                                                       local_entity);
-        _values.insert({key, mesh_function[entity_index]});
+        _values.insert({key, mf_values[entity_index]});
       }
     }
   }
@@ -320,8 +326,7 @@ bool MeshValueCollection<T>::set_value(std::size_t cell_index,
   assert(_dim >= 0);
   if (!_mesh)
   {
-    log::dolfin_error(
-        "MeshValueCollection.h", "set value",
+    throw std::runtime_error(
         "A mesh has not been associated with this MeshValueCollection");
   }
 
@@ -343,8 +348,7 @@ bool MeshValueCollection<T>::set_value(std::size_t entity_index, const T& value)
 {
   if (!_mesh)
   {
-    log::dolfin_error(
-        "MeshValueCollection.h", "set value",
+    throw std::runtime_error(
         "A mesh has not been associated with this MeshValueCollection");
   }
 
@@ -371,15 +375,15 @@ bool MeshValueCollection<T>::set_value(std::size_t entity_index, const T& value)
   }
 
   // Get mesh connectivity d --> D
-  _mesh->init(_dim, D);
-  const MeshConnectivity& connectivity
-      = _mesh->topology().connectivity(_dim, D);
+  _mesh->create_connectivity(_dim, D);
+  assert(_mesh->topology().connectivity(_dim, D));
+  const Connectivity& connectivity = *_mesh->topology().connectivity(_dim, D);
 
   // Find the cell
-  assert(!connectivity.empty());
   assert(connectivity.size(entity_index) > 0);
   const MeshEntity entity(*_mesh, _dim, entity_index);
-  const mesh::Cell cell(*_mesh, connectivity(entity_index)[0]); // choose first
+  const mesh::Cell cell(
+      *_mesh, connectivity.connections(entity_index)[0]); // choose first
 
   // Find the local entity index
   const std::size_t local_entity = cell.index(entity);
@@ -412,9 +416,9 @@ T MeshValueCollection<T>::get_value(std::size_t cell_index,
 
   if (it == _values.end())
   {
-    log::dolfin_error("MeshValueCollection.h", "extract value",
-                      "No value stored for cell index: %d and local index: %d",
-                      cell_index, local_entity);
+    throw std::runtime_error(
+        "No value stored for cell index: " + std::to_string(cell_index)
+        + " and local index: " + std::to_string(local_entity));
   }
 
   return it->second;
@@ -447,8 +451,8 @@ std::string MeshValueCollection<T>::str(bool verbose) const
   if (verbose)
   {
     s << str(false) << std::endl << std::endl;
-    log::warning(
-        "Verbose output of MeshValueCollection must be implemented manually.");
+
+    // Verbose output of MeshValueCollection must be implemented manually.
   }
   else
   {
@@ -459,5 +463,5 @@ std::string MeshValueCollection<T>::str(bool verbose) const
   return s.str();
 }
 //---------------------------------------------------------------------------
-}
-}
+} // namespace mesh
+} // namespace dolfin

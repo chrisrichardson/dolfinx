@@ -7,7 +7,7 @@
 #include "DiscreteOperators.h"
 #include <array>
 #include <dolfin/common/IndexMap.h>
-#include <dolfin/fem/GenericDofMap.h>
+#include <dolfin/fem/DofMap.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/la/PETScMatrix.h>
 #include <dolfin/la/SparsityPattern.h>
@@ -21,7 +21,7 @@ using namespace dolfin;
 using namespace dolfin::fem;
 
 //-----------------------------------------------------------------------------
-std::shared_ptr<la::PETScMatrix>
+la::PETScMatrix
 DiscreteOperators::build_gradient(const function::FunctionSpace& V0,
                                   const function::FunctionSpace& V1)
 {
@@ -29,12 +29,12 @@ DiscreteOperators::build_gradient(const function::FunctionSpace& V0,
   // easier to build matrix sparsity patterns.
 
   // Get mesh
-  assert(V0.mesh());
-  const mesh::Mesh& mesh = *(V0.mesh());
+  assert(V0.mesh);
+  const mesh::Mesh& mesh = *(V0.mesh);
 
   // Check that mesh is the same for both function spaces
-  assert(V1.mesh());
-  if (&mesh != V1.mesh().get())
+  assert(V1.mesh);
+  if (&mesh != V1.mesh.get())
   {
     throw std::runtime_error(
         "Ccompute discrete gradient operator. Function spaces "
@@ -42,7 +42,7 @@ DiscreteOperators::build_gradient(const function::FunctionSpace& V0,
   }
 
   // Check that V0 is a (lowest-order) edge basis
-  mesh.init(1);
+  mesh.create_entities(1);
   if (V0.dim() != mesh.num_entities_global(1))
   {
     throw std::runtime_error(
@@ -60,24 +60,27 @@ DiscreteOperators::build_gradient(const function::FunctionSpace& V0,
 
   // Build maps from entities to local dof indices
   const Eigen::Array<PetscInt, Eigen::Dynamic, 1> edge_to_dof
-      = V0.dofmap()->dofs(mesh, 1);
+      = V0.dofmap->dofs(mesh, 1);
   const Eigen::Array<PetscInt, Eigen::Dynamic, 1> vertex_to_dof
-      = V1.dofmap()->dofs(mesh, 0);
+      = V1.dofmap->dofs(mesh, 0);
 
   // Build maps from local dof numbering to global
-  Eigen::Array<std::size_t, Eigen::Dynamic, 1> local_to_global_map0
-      = V0.dofmap()->tabulate_local_to_global_dofs();
-  Eigen::Array<std::size_t, Eigen::Dynamic, 1> local_to_global_map1
-      = V1.dofmap()->tabulate_local_to_global_dofs();
+  Eigen::Array<std::int64_t, Eigen::Dynamic, 1> local_to_global_map0
+      = V0.dofmap->index_map->indices(true);
+  Eigen::Array<std::int64_t, Eigen::Dynamic, 1> local_to_global_map1
+      = V1.dofmap->index_map->indices(true);
 
   // Initialize edge -> vertex connections
-  mesh.init(1, 0);
+  mesh.create_connectivity(1, 0);
 
   // Copy index maps from dofmaps
   std::array<std::shared_ptr<const common::IndexMap>, 2> index_maps
-      = {{V0.dofmap()->index_map(), V1.dofmap()->index_map()}};
+      = {{V0.dofmap->index_map, V1.dofmap->index_map}};
   std::vector<std::array<std::int64_t, 2>> local_range
-      = {V0.dofmap()->ownership_range(), V1.dofmap()->ownership_range()};
+      = {{index_maps[0]->block_size * index_maps[0]->local_range()[0],
+          index_maps[0]->block_size * index_maps[0]->local_range()[1]},
+         {index_maps[1]->block_size * index_maps[1]->local_range()[0],
+          index_maps[1]->block_size * index_maps[1]->local_range()[1]}};
 
   // Initialise sparsity pattern
   la::SparsityPattern pattern(mesh.mpi_comm(), index_maps);
@@ -106,10 +109,10 @@ DiscreteOperators::build_gradient(const function::FunctionSpace& V0,
   Eigen::Map<const EigenArrayXpetscint> _rows(rows.data(), rows.size());
   Eigen::Map<const EigenArrayXpetscint> _cols(cols.data(), cols.size());
   pattern.insert_global(_rows, _cols);
-  pattern.apply();
+  pattern.assemble();
 
-  // Initialise matrix
-  auto A = std::make_shared<la::PETScMatrix>(mesh.mpi_comm(), pattern);
+  // Create matrix
+  la::PETScMatrix A(mesh.mpi_comm(), pattern);
 
   // Build discrete gradient operator/matrix
   for (auto& edge : mesh::MeshRange<mesh::Edge>(mesh))
@@ -137,11 +140,11 @@ DiscreteOperators::build_gradient(const function::FunctionSpace& V0,
     }
 
     // Set values in matrix
-    A->set(values, 1, &row, 2, cols);
+    A.set(values, 1, &row, 2, cols);
   }
 
   // Finalise matrix
-  A->apply(la::PETScMatrix::AssemblyType::FINAL);
+  A.apply(la::PETScMatrix::AssemblyType::FINAL);
 
   return A;
 }

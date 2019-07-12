@@ -1,16 +1,17 @@
-"""Unit tests for the FunctionSpace class"""
-
 # Copyright (C) 2011 Johan Hake
 #
 # This file is part of DOLFIN (https://www.fenicsproject.org)
 #
 # SPDX-License-Identifier:    LGPL-3.0-or-later
+"""Unit tests for the FunctionSpace class"""
 
 import pytest
-from dolfin import (UnitCubeMesh, FunctionSpace, VectorFunctionSpace, VectorElement, FiniteElement,
-                    Function, TestFunction, TrialFunction, grad, triangle, MPI)
+
+from dolfin import (MPI, Function, FunctionSpace, TestFunction, TrialFunction,
+                    UnitCubeMesh, VectorFunctionSpace)
+from dolfin_utils.test.fixtures import fixture
+from ufl import FiniteElement, VectorElement, grad, triangle
 from ufl.log import UFLException
-from dolfin_utils.test import fixture
 
 
 @fixture
@@ -20,12 +21,12 @@ def mesh():
 
 @fixture
 def V(mesh):
-    return FunctionSpace(mesh, 'CG', 1)
+    return FunctionSpace(mesh, ('CG', 1))
 
 
 @fixture
 def W(mesh):
-    return VectorFunctionSpace(mesh, 'CG', 1)
+    return VectorFunctionSpace(mesh, ('CG', 1))
 
 
 @fixture
@@ -68,8 +69,8 @@ def test_python_interface(V, V2, W, W2, Q):
     assert W.dolfin_element().signature() == W2.dolfin_element().signature()
     assert V.ufl_element() == V2.ufl_element()
     assert W.ufl_element() == W2.ufl_element()
-    assert W.id() == W2.id()
-    assert V.id() == V2.id()
+    assert W.id == W2.id
+    assert V.id == V2.id
 
 
 def test_component(V, W, Q):
@@ -126,14 +127,14 @@ def test_collapse(W, V):
     Vs = W.sub(2)
     with pytest.raises(RuntimeError):
         Function(Vs)
-    assert Vs.dofmap().cell_dofs(0)[0] != V.dofmap().cell_dofs(0)[0]
+    assert Vs.dofmap.cell_dofs(0)[0] != V.dofmap.cell_dofs(0)[0]
 
     # Collapse the space it should now be the same as V
     Vc, dofmap_new_old = Vs.collapse(True)
-    assert Vc.dofmap().cell_dofs(0)[0] == V.dofmap().cell_dofs(0)[0]
+    assert Vc.dofmap.cell_dofs(0)[0] == V.dofmap.cell_dofs(0)[0]
     f0 = Function(V)
     f1 = Function(Vc)
-    assert f0.vector().size() == f1.vector().size()
+    assert f0.vector().getSize() == f1.vector().getSize()
 
 
 def test_argument_equality(mesh, V, V2, W, W2):
@@ -142,8 +143,8 @@ def test_argument_equality(mesh, V, V2, W, W2):
 
     """
     mesh2 = UnitCubeMesh(MPI.comm_world, 8, 8, 8)
-    V3 = FunctionSpace(mesh2, 'CG', 1)
-    W3 = VectorFunctionSpace(mesh2, 'CG', 1)
+    V3 = FunctionSpace(mesh2, ('CG', 1))
+    W3 = VectorFunctionSpace(mesh2, ('CG', 1))
 
     for TF in (TestFunction, TrialFunction):
         v = TF(V)

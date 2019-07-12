@@ -6,24 +6,18 @@
 
 #pragma once
 
-#include <boost/multi_array.hpp>
+#include <Eigen/Dense>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 namespace dolfin
 {
-namespace geometry
-{
-class Point;
-}
 
 namespace mesh
 {
 class Cell;
 class MeshEntity;
-template <typename T>
-class MeshFunction;
 
 /// This class provides a common interface for different cell types.
 /// Each cell type implements mesh functionality that is specific to
@@ -47,7 +41,7 @@ public:
   CellType(Type cell_type, Type facet_type);
 
   /// Destructor
-  virtual ~CellType();
+  virtual ~CellType() = default;
 
   /// Create cell type from type (factory function)
   static CellType* create(Type type);
@@ -60,12 +54,6 @@ public:
 
   /// Convert from cell type to string
   static std::string type2string(Type type);
-
-  /// Return type of cell
-  Type cell_type() const { return _cell_type; }
-
-  /// Return type of cell for facets
-  Type facet_type() const { return _facet_type; }
 
   /// Return type of cell for entity of dimension i
   Type entity_type(std::size_t i) const;
@@ -82,12 +70,13 @@ public:
   /// Return number of vertices for cell
   int num_vertices() const { return num_vertices(dim()); }
 
-  /// Return number of vertices for entity of given topological dimension
+  /// Return number of vertices for entity of given topological
+  /// dimension
   virtual std::size_t num_vertices(std::size_t dim) const = 0;
 
-  /// Create entities e of given topological dimension from
-  /// vertices v
-  virtual void create_entities(boost::multi_array<std::int32_t, 2>& e,
+  /// Create entities e of given topological dimension from vertices v
+  virtual void create_entities(Eigen::Array<std::int32_t, Eigen::Dynamic,
+                                            Eigen::Dynamic, Eigen::RowMajor>& e,
                                std::size_t dim,
                                const std::int32_t* v) const = 0;
 
@@ -108,17 +97,18 @@ public:
 
   /// Compute squared distance to given point
   virtual double squared_distance(const Cell& cell,
-                                  const geometry::Point& point) const = 0;
+                                  const Eigen::Vector3d& point) const = 0;
 
-  /// Compute component i of normal of given facet with respect to the cell
+  /// Compute component i of normal of given facet with respect to the
+  /// cell
   virtual double normal(const Cell& cell, std::size_t facet,
                         std::size_t i) const = 0;
 
   /// Compute of given facet with respect to the cell
-  virtual geometry::Point normal(const Cell& cell, std::size_t facet) const = 0;
+  virtual Eigen::Vector3d normal(const Cell& cell, std::size_t facet) const = 0;
 
   /// Compute normal to given cell (viewed as embedded in 3D)
-  virtual geometry::Point cell_normal(const Cell& cell) const = 0;
+  virtual Eigen::Vector3d cell_normal(const Cell& cell) const = 0;
 
   /// Compute the area/length of given facet with respect to the cell
   virtual double facet_area(const Cell& cell, std::size_t facet) const = 0;
@@ -129,27 +119,8 @@ public:
   /// Mapping of DOLFIN/UFC vertex ordering to VTK/XDMF ordering
   virtual std::vector<std::int8_t> vtk_mapping() const = 0;
 
-protected:
-  Type _cell_type;
-  Type _facet_type;
-
-  /// Sort vertices based on global entity indices
-  static void sort_entities(
-      std::size_t num_vertices, std::int32_t* vertices,
-      const std::vector<std::int64_t>& local_to_global_vertex_indices);
-
-private:
-  // Check if list of vertices is increasing
-  static bool
-  increasing(std::size_t num_vertices, const std::int32_t* vertices,
-             const std::vector<std::int64_t>& local_to_global_vertex_indices);
-
-  // Check that <entity e0 with vertices v0> <= <entity e1 with vertices v1>
-  static bool
-  increasing(std::size_t n0, const std::int32_t* v0, std::size_t n1,
-             const std::int32_t* v1, std::size_t num_vertices,
-             const std::int32_t* vertices,
-             const std::vector<std::int64_t>& local_to_global_vertex_indices);
+  const Type type;
+  const Type facet_type;
 };
-}
-}
+} // namespace mesh
+} // namespace dolfin

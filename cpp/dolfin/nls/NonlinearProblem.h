@@ -1,4 +1,4 @@
-// Copyright (C) 2005-2008 Garth N. Wells
+// Copyright (C) 2005-2018 Garth N. Wells
 //
 // This file is part of DOLFIN (https://www.fenicsproject.org)
 //
@@ -6,14 +6,11 @@
 
 #pragma once
 
+#include <petscmat.h>
+#include <petscvec.h>
+
 namespace dolfin
 {
-
-namespace la
-{
-class PETScMatrix;
-class PETScVector;
-}
 
 namespace nls
 {
@@ -25,37 +22,30 @@ class NonlinearProblem
 {
 public:
   /// Constructor
-  NonlinearProblem() {}
+  NonlinearProblem() = default;
 
   /// Destructor
   virtual ~NonlinearProblem() {}
 
   /// Function called by Newton solver before requesting F, J or J_pc.
-  /// This can be used to compute F, J and J_pc together. Preconditioner
-  /// matrix P can be left empty so that A is used instead
-  virtual void form(la::PETScMatrix& A, la::PETScMatrix& P, la::PETScVector& b,
-                    const la::PETScVector& x)
+  /// This can be used to compute F, J and J_pc together.
+  /// Note: the vector x is not const as this function is commonly used
+  /// to update ghost entries before assembly.
+  virtual void form(Vec x)
   {
     // Do nothing if not supplied by the user
   }
 
   /// Compute F at current point x
-  virtual void F(la::PETScVector& b, const la::PETScVector& x) = 0;
+  virtual Vec F(const Vec x) = 0;
 
   /// Compute J = F' at current point x
-  virtual void J(la::PETScMatrix& A, const la::PETScVector& x) = 0;
+  virtual Mat J(const Vec x) = 0;
 
   /// Compute J_pc used to precondition J. Not implementing this
   /// or leaving P empty results in system matrix A being used
   /// to construct preconditioner.
-  ///
-  /// Note that if nonempty P is not assembled on first call
-  /// then a solver implementation may throw away P and not
-  /// call this routine ever again.
-  virtual void J_pc(la::PETScMatrix& P, const la::PETScVector& x)
-  {
-    // Do nothing if not supplied by the user
-  }
+  virtual Mat P(const Vec x) { return nullptr; }
 };
-}
-}
+} // namespace nls
+} // namespace dolfin

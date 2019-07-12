@@ -7,7 +7,6 @@
 #pragma once
 
 #include "MeshEntity.h"
-#include <dolfin/geometry/Point.h>
 
 namespace dolfin
 {
@@ -25,13 +24,13 @@ public:
   Face(const Mesh& mesh, std::size_t index) : MeshEntity(mesh, 2, index) {}
 
   /// Destructor
-  ~Face() {}
+  ~Face() = default;
 
   /// Calculate the area of the face (triangle)
   double area() const;
 
   /// Compute normal to the face
-  geometry::Point normal() const;
+  Eigen::Vector3d normal() const;
 };
-}
-}
+} // namespace mesh
+} // namespace dolfin
