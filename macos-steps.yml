@@ -65,7 +65,7 @@ steps:
     export PETSC_DIR=/usr/local/petsc
     export HDF5_ROOT=/usr/local/petsc
     export HDF5_DIR=/usr/local/petsc
-    pip3 install petsc4py==3.10.0 mpi4py
+    pip3 install petsc4py==3.11.0 mpi4py
     python3 setup.py build
   displayName: Python build
   workingDirectory: python
