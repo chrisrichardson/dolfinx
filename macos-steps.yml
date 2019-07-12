@@ -40,12 +40,12 @@ steps:
     export PETSC_DIR=/usr/local/petsc
     export HDF5_ROOT=/usr/local/petsc
     export HDF5_DIR=/usr/local/petsc
-    cmake -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local ..
   displayName: CMake
 
 - bash: |
     make -j4
-    make install
+    sudo make install
   displayName: Build and install C++
   workingDirectory: cpp/build
 
@@ -62,7 +62,7 @@ steps:
   workingDirectory: python
 
 - bash: |
-    source $HOME/FEniCS/share/dolfin/dolfin.conf
+    source /usr/local/share/dolfin/dolfin.conf
     export PETSC_DIR=/usr/local/petsc
     export HDF5_ROOT=/usr/local/petsc
     export HDF5_DIR=/usr/local/petsc
@@ -73,6 +73,7 @@ steps:
   workingDirectory: python
 
 - bash: |
+    source /usr/local/share/dolfin/dolfin.conf
     python3 -m pytest -s -v .
   displayName: Run Python unit tests
   workingDirectory: python/test/unit
