@@ -37,6 +37,8 @@ steps:
     mkdir -p cpp/build
     cd cpp/build
     export PETSC_DIR=/usr/local/petsc
+    export HDF5_ROOT=/usr/local/petsc
+    export HDF5_DIR=/usr/local/petsc
     cmake -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
   displayName: CMake
 
