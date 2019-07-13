@@ -23,7 +23,7 @@ steps:
 
 - bash: |
     brew update
-    brew install pkg-config eigen open-mpi boost || true
+    brew install pkg-config eigen mpich boost || true
   displayName: Install Homebrew packages
 
 - bash: |
