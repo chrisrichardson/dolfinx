@@ -75,6 +75,13 @@ steps:
 - bash: |
     source /usr/local/share/dolfin/dolfin.conf
     export PETSC_DIR=/usr/local/petsc
-    python3 -m pytest -s -v .
+    python3 -m pytest .
   displayName: Run Python unit tests
+  workingDirectory: python/test/unit
+
+- bash: |
+    source /usr/local/share/dolfin/dolfin.conf
+    export PETSC_DIR=/usr/local/petsc
+    mpirun -n 3 python3 -m pytest .
+  displayName: Run Python unit tests (MPI)
   workingDirectory: python/test/unit
