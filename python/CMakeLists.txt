@@ -16,7 +16,7 @@ include(${DOLFIN_USE_FILE})
 #endif()
 
 # Create the binding library
-pybind11_add_module(cpp SHARED
+pybind11_add_module(cpp SHARED NO_EXTRAS
   src/dolfin.cpp
   src/common.cpp
   src/fem.cpp

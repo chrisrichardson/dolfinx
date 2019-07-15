@@ -22,12 +22,14 @@ steps:
   displayName: Extract PETSc install
 
 - bash: |
+    env
     brew update
     brew install pkg-config eigen mpich boost || true
   displayName: Install Homebrew packages
 
 - bash: |
     pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme scipy --upgrade
+    pip3 install pytest-azurepipelines
     pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
     pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
     pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
@@ -82,7 +84,6 @@ steps:
 - bash: |
     source /usr/local/share/dolfin/dolfin.conf
     export PETSC_DIR=/usr/local/petsc
-    pip3 install pytest-azurepipelines
     python3 -m pytest --test-run-title="MacOS Python Unit Tests (serial)" .
   displayName: Run Python unit tests
   workingDirectory: python/test/unit
