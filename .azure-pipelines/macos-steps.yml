@@ -36,9 +36,18 @@ steps:
   displayName: Install Python3 dependencies
 
 - bash: |
+    sysctl -n machdep.cpu.brand_string
+    sysctl -n hw.ncpu
+    python3 -m flake8 dolfin
+    python3 -m flake8 dolfin_utils
+    python3 -m flake8 demo
+    python3 -m flake8 test
+  displayName: Flake8 checks on Python code
+  workingDirectory: python
+
+- bash: |
     mkdir -p cpp/build
     cd cpp/build
-    ls -l /usr/local/petsc
     export PETSC_DIR=/usr/local/petsc
     export HDF5_ROOT=/usr/local/petsc
     export HDF5_DIR=/usr/local/petsc
@@ -56,6 +65,13 @@ steps:
     ctest -R unittests
     mpirun -np 3 ctest -R unittests
   displayName: C++ Unit Tests
+  workingDirectory: cpp/build
+
+- bash: |
+    make -j3 demos
+    ctest -j3 -R demo -R serial
+    ctest --verbose -R demo -R mpi
+  displayName: Build and run C++ regressions tests
   workingDirectory: cpp/build
 
 - bash: |
@@ -94,3 +110,9 @@ steps:
     mpirun -n 3 python3 -m pytest --test-run-title="MacOS Python Unit Tests (MPI)" .
   displayName: Run Python unit tests (MPI)
   workingDirectory: python/test/unit
+
+- bash: |
+    python3 ./generate-demo-files.py
+    python3 -m pytest -n3 -v --test-run-title="MacOS Python demos" -m serial test.py
+  displayName: Run demos (Python, serial)
+  workingDirectory: python/demo
