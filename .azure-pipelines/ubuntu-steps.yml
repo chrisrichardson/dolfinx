@@ -9,6 +9,7 @@ steps:
     apt-get -qq update
     apt-get -y install libfreetype6-dev
     pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme --upgrade
+    pip3 -q install pytest-azurepipelines
     pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
     pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
     pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
@@ -22,12 +23,12 @@ steps:
 
 - bash: |
     source $HOME/FEniCS/share/dolfin/dolfin.conf
-    cd python
-    python3 setup.py install  --prefix=$HOME/.local
+    python3 setup.py install --prefix=$HOME/.local
   displayName: Build and install Python interface
+  workingDirectory: python
 
 - bash: |
     source $HOME/FEniCS/share/dolfin/dolfin.conf
-    cd python/test/unit
     python3 -m pytest .
   displayName: Python unit tests
+  workingDirectory: python/test/unit
