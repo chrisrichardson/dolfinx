@@ -61,15 +61,15 @@ steps:
   workingDirectory: cpp/build
 
 - bash: |
-    make -j3 unittests
+    make -j4 unittests
     ctest -R unittests
     mpirun -np 3 ctest -R unittests
   displayName: C++ Unit Tests
   workingDirectory: cpp/build
 
 - bash: |
-    make -j3 demos
-    ctest -j3 -R demo -R serial
+    make -j4 demos
+    ctest -j4 -R demo -R serial
     ctest --verbose -R demo -R mpi
   displayName: Build and run C++ regressions tests
   workingDirectory: cpp/build
@@ -113,6 +113,6 @@ steps:
 
 - bash: |
     python3 ./generate-demo-files.py
-    python3 -m pytest -n3 -v --test-run-title="MacOS Python demos" -m serial test.py
+    python3 -m pytest -s -v --test-run-title="MacOS Python demos" -m serial test.py
   displayName: Run demos (Python, serial)
   workingDirectory: python/demo
