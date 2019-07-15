@@ -75,6 +75,7 @@ steps:
 - bash: |
     source /usr/local/share/dolfin/dolfin.conf
     export PETSC_DIR=/usr/local/petsc
+    pip3 install pytest-azurepipelines
     python3 -m pytest .
   displayName: Run Python unit tests
   workingDirectory: python/test/unit
