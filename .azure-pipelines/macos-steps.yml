@@ -112,6 +112,7 @@ steps:
   workingDirectory: python/test/unit
 
 - bash: |
+    export MPL_BACKEND=Agg
     python3 ./generate-demo-files.py
     ls -l
     cp dolfin_fine.* stokes*
