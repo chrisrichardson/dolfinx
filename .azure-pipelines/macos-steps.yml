@@ -113,6 +113,7 @@ steps:
 
 - bash: |
     python3 ./generate-demo-files.py
+    ls -l
     python3 -m pytest -s -v --test-run-title="MacOS Python demos" -m serial test.py
   displayName: Run demos (Python, serial)
   workingDirectory: python/demo
