@@ -1,7 +1,7 @@
 resources:
   containers:
   - container: dolfinx
-    image: 'quay.io/fenicsproject/dolfinx:latest'
+    image: 'quay.io/fenicsproject/dolfinx:dev-env-real'
 
 jobs:
 
