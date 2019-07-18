@@ -85,7 +85,7 @@ for i, d in enumerate(defines):
 
 cpp_files = glob.glob("src/*.cpp")
 
-ext_modules = [Extension('cpp',
+ext_modules = [Extension('dolfin.cpp',
                          cpp_files,
                          define_macros=defines,
                          include_dirs=includes,
