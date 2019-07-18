@@ -34,7 +34,8 @@ steps:
   workingDirectory: python/test/unit
 
 - bash: |
+    cat /proc/cpuinfo
     source $HOME/FEniCS/share/dolfin/dolfin.conf
-    mpirun -n 3 python3 -m pytest --test-run-title="Ubuntu Python Unit Tests (MPI)" .
-  displayName: Python unit tests
+    mpirun -verbose -n 3 python3 -m pytest -s -v --test-run-title="Ubuntu Python Unit Tests (MPI)" .
+  displayName: Python unit tests (MPI)
   workingDirectory: python/test/unit
