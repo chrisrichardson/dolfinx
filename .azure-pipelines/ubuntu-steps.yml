@@ -22,7 +22,7 @@ steps:
 
 - bash: |
     source $HOME/FEniCS/share/dolfin/dolfin.conf
-    python3 setup.py install --prefix=$HOME/.local
+    sudo pip3 install .
   displayName: Build and install Python interface
   workingDirectory: python
 
