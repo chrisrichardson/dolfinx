@@ -100,7 +100,7 @@ steps:
 - bash: |
     source /usr/local/share/dolfin/dolfin.conf
     export PETSC_DIR=/usr/local/petsc
-    python3 -m pytest --test-run-title="MacOS Python Unit Tests (serial)" .
+    python3 -m pytest -n 3 --test-run-title="MacOS Python Unit Tests (serial)" .
   displayName: Run Python unit tests
   workingDirectory: python/test/unit
 
