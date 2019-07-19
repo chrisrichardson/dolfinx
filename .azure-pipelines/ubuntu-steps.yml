@@ -10,16 +10,14 @@ steps:
     # apt-get -y install libfreetype6-dev
     pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme --upgrade
     pip3 -q install pytest-azurepipelines
-    pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
-    pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
-    pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
+    pip3 install git+https://bitbucket.org/fenics-project/fiat.git git+https://bitbucket.org/fenics-project/ufl.git git+https://github.com/FEniCS/ffcx --no-deps --upgrade
   displayName: Install dependencies
 
 
 - bash: |
     mkdir -p build
     cd build
-    cmake -G Ninja -DCMAKE_BUILD_TYPE=Developer cpp/
+    cmake -G Ninja -DCMAKE_BUILD_TYPE=Developer ../cpp/
     ninja -j3 install
   displayName: Configure and build C++
 
