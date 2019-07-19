@@ -25,8 +25,9 @@ steps:
 
 - bash: |
     # source $HOME/FEniCS/share/dolfin/dolfin.conf
+    echo $PETSC_DIR
     cd python
-    sudo pip3 -v install .
+    sudo pip3 install .
   displayName: Build and install Python interface
   workingDirectory: python
 
