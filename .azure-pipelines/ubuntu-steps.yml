@@ -15,6 +15,7 @@ steps:
     pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
   displayName: Install dependencies
 
+
 - bash: |
     cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
     ninja -j3 install
