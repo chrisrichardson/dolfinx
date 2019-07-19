@@ -6,8 +6,8 @@ steps:
   submodules: true
 
 - bash: |
-    apt-get -qq update
-    apt-get -y install libfreetype6-dev
+    # apt-get -qq update
+    # apt-get -y install libfreetype6-dev
     pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme --upgrade
     pip3 -q install pytest-azurepipelines
     pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
@@ -17,12 +17,12 @@ steps:
 
 - bash: |
     cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
-    ninja install
+    ninja -j3 install
   displayName: Configure and build C++
 
 - bash: |
     source $HOME/FEniCS/share/dolfin/dolfin.conf
-    python3 setup.py install --prefix=$HOME/.local
+    pip3 -v install .
   displayName: Build and install Python interface
   workingDirectory: python
 
