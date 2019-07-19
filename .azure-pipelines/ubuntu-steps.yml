@@ -27,7 +27,6 @@ steps:
     # source $HOME/FEniCS/share/dolfin/dolfin.conf
     echo $PETSC_DIR
     echo $PWD
-    cd python
     sudo pip3 install .
   displayName: Build and install Python interface
   workingDirectory: python
