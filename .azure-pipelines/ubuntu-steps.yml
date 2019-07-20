@@ -12,17 +12,17 @@ steps:
     sudo pip3 -q install pytest-azurepipelines
     sudo pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
     sudo pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
-    sudo pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
+    sudo pip3 install git+https://github.com/FEniCS/ffcx --upgrade
   displayName: Install dependencies
 
 - bash: |
     cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
-    sudo ninja install
+    ninja install
   displayName: Configure and build C++
 
 - bash: |
     source $HOME/FEniCS/share/dolfin/dolfin.conf
-    pip3 install .
+    python3 setup.py install --prefix=$HOME/.local
   displayName: Build and install Python interface
   workingDirectory: python
 
