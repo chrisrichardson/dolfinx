@@ -16,7 +16,11 @@ steps:
   displayName: Install dependencies
 
 - bash: |
-    cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
+    cd cpp
+    mkdir build
+    cd build
+    cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
+    ninja build
     ninja install
   displayName: Configure and build C++
 
