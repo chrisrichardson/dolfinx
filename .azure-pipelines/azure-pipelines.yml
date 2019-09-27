@@ -16,11 +16,11 @@ jobs:
   steps:
   - template: ./ubuntu-steps.yml
 
-- job: MacOS
-  displayName: MacOS CI Test
+# - job: MacOS
+#   displayName: MacOS CI Test
 
-  pool:
-    vmImage: macOS-10.14
+#   pool:
+#     vmImage: macOS-10.14
 
-  steps:
-  - template: ./macos-steps.yml
+#   steps:
+#   - template: ./macos-steps.yml
