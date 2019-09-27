@@ -18,7 +18,8 @@ steps:
 - bash: |
     # cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
     cd cpp && mkdir build && cd build && cmake -G Ninja ..
-    ninja -j3 install
+    ninja -j3
+    sudo ninja install
   displayName: Configure and build C++
 
 - bash: |
