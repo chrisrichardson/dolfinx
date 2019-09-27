@@ -22,13 +22,13 @@ steps:
 - bash: |
     # cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
     cd cpp && mkdir build && cd build && cmake -G Ninja ..
-    ninja -j3
+    ninja
     sudo ninja install
   displayName: Configure and build C++
 
 - bash: |
     # source $HOME/FEniCS/share/dolfin/dolfin.conf
-    pip3 install -e .
+    sudo pip3 install -e .
   displayName: Build and install Python interface
   workingDirectory: python
 
