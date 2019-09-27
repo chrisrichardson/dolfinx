@@ -12,8 +12,11 @@ steps:
     sudo -H pip3 -q install pytest-azurepipelines
     sudo -H pip3 install git+https://github.com/FEniCS/fiat.git --upgrade
     sudo -H pip3 install git+https://github.com/FEniCS/ufl.git --upgrade
-    sudo -H pip3 install git+https://github.com/FEniCS/ffcx.git ---upgrade
   displayName: Install dependencies
+
+- bash: |
+    sudo -H pip3 install git+https://github.com/FEniCS/ffcx.git ---upgrade
+  displayName: Install dependencies (ffcx)
 
 - bash: |
     # cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
