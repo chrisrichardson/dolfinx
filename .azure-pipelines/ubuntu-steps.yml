@@ -16,25 +16,26 @@ steps:
   displayName: Install dependencies
 
 - bash: |
-    cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
+    # cd cpp && mkdir build && cd build && cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$HOME/FEniCS ..
+    cd cpp && mkdir build && cd build && cmake -G Ninja ..
     ninja -j3 install
   displayName: Configure and build C++
 
 - bash: |
-    source $HOME/FEniCS/share/dolfin/dolfin.conf
+    # source $HOME/FEniCS/share/dolfin/dolfin.conf
     pip3 -v --no-deps install .
   displayName: Build and install Python interface
   workingDirectory: python
 
 - bash: |
-    source $HOME/FEniCS/share/dolfin/dolfin.conf
+    # source $HOME/FEniCS/share/dolfin/dolfin.conf
     python3 -m pytest --test-run-title="Ubuntu Python Unit Tests (serial)" .
   displayName: Python unit tests
   workingDirectory: python/test/unit
 
 - bash: |
     cat /proc/cpuinfo
-    source $HOME/FEniCS/share/dolfin/dolfin.conf
+    # source $HOME/FEniCS/share/dolfin/dolfin.conf
     mpirun -verbose -n 3 python3 -m pytest -s -v --test-run-title="Ubuntu Python Unit Tests (MPI)" .
   displayName: Python unit tests (MPI)
   workingDirectory: python/test/unit
