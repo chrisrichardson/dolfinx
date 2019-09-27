@@ -8,11 +8,11 @@ steps:
 - bash: |
     # apt-get -qq update
     # apt-get -y install libfreetype6-dev
-    pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme --upgrade
-    pip3 -q install pytest-azurepipelines
-    pip3 install git+https://bitbucket.org/fenics-project/fiat.git --upgrade
-    pip3 install git+https://bitbucket.org/fenics-project/ufl.git --upgrade
-    pip3 install git+https://github.com/FEniCS/ffcx --no-deps --upgrade
+    sudo pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme --upgrade
+    sudo pip3 -q install pytest-azurepipelines
+    sudo pip3 install git+https://github.com/FEniCS/fiat.git --upgrade
+    sudo pip3 install git+https://github.com/FEniCS/ufl.git --upgrade
+    sudo pip3 install git+https://github.com/FEniCS/ffcx.git ---upgrade
   displayName: Install dependencies
 
 - bash: |
