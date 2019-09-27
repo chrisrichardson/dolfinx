@@ -80,10 +80,11 @@ import numpy as np
 import dolfin
 import dolfin.plotting
 import ufl
-from dolfin import (MPI, CellType, DirichletBC, Function, FunctionSpace,
-                    RectangleMesh, TestFunction, TrialFunction, solve)
-from dolfin.function.specialfunctions import SpatialCoordinate
+from dolfin import (MPI, DirichletBC, Function, FunctionSpace, RectangleMesh,
+                    TestFunction, TrialFunction, solve)
+from dolfin.cpp.mesh import CellType
 from dolfin.io import XDMFFile
+from dolfin.specialfunctions import SpatialCoordinate
 from ufl import ds, dx, grad, inner
 
 # We begin by defining a mesh of the domain and a finite element
@@ -97,7 +98,7 @@ from ufl import ds, dx, grad, inner
 mesh = RectangleMesh(
     MPI.comm_world,
     [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
-    CellType.Type.triangle, dolfin.cpp.mesh.GhostMode.none)
+    CellType.triangle, dolfin.cpp.mesh.GhostMode.none)
 V = FunctionSpace(mesh, ("Lagrange", 1))
 
 cmap = dolfin.fem.create_coordinate_map(mesh.ufl_domain())
@@ -124,7 +125,7 @@ mesh.geometry.coord_mapping = cmap
 # Define Dirichlet boundary (x = 0 or x = 1)
 
 
-def boundary(x, only_boundary):
+def boundary(x):
     return np.logical_or(x[:, 0] < np.finfo(float).eps,
                          x[:, 0] > 1.0 - np.finfo(float).eps)
 
@@ -142,7 +143,7 @@ def boundary(x, only_boundary):
 
 # Define boundary condition
 u0 = Function(V)
-u0.vector().set(0.0)
+u0.vector.set(0.0)
 bc = DirichletBC(V, u0, boundary)
 
 # Next, we want to express the variational problem.  First, we need to

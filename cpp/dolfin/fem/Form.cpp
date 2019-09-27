@@ -10,11 +10,11 @@
 #include <dolfin/fem/CoordinateMapping.h>
 #include <dolfin/fem/FiniteElement.h>
 #include <dolfin/fem/utils.h>
+#include <dolfin/function/Constant.h>
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
-#include <dolfin/mesh/Cell.h>
-#include <dolfin/mesh/Facet.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/MeshEntity.h>
 #include <dolfin/mesh/MeshFunction.h>
 #include <memory>
 #include <string>
@@ -24,19 +24,23 @@ using namespace dolfin;
 using namespace dolfin::fem;
 
 //-----------------------------------------------------------------------------
-Form::Form(const std::vector<std::shared_ptr<const function::FunctionSpace>>&
-               function_spaces,
-           const FormIntegrals& integrals, const FormCoefficients& coefficients,
-           std::shared_ptr<const CoordinateMapping> coord_mapping)
-    : _integrals(integrals), _coefficients(coefficients),
+Form::Form(
+    const std::vector<std::shared_ptr<const function::FunctionSpace>>&
+        function_spaces,
+    const FormIntegrals& integrals, const FormCoefficients& coefficients,
+    const std::vector<
+        std::pair<std::string, std::shared_ptr<const function::Constant>>>
+        constants,
+    std::shared_ptr<const CoordinateMapping> coord_mapping)
+    : _integrals(integrals), _coefficients(coefficients), _constants(constants),
       _function_spaces(function_spaces), _coord_mapping(coord_mapping)
 {
   // Set _mesh from function::FunctionSpace, and check they are the same
   if (!function_spaces.empty())
-    _mesh = function_spaces[0]->mesh;
+    _mesh = function_spaces[0]->mesh();
   for (auto& V : function_spaces)
   {
-    if (_mesh != V->mesh)
+    if (_mesh != V->mesh())
       throw std::runtime_error("Incompatible mesh");
   }
 
@@ -47,12 +51,15 @@ Form::Form(const std::vector<std::shared_ptr<const function::FunctionSpace>>&
 //-----------------------------------------------------------------------------
 Form::Form(const std::vector<std::shared_ptr<const function::FunctionSpace>>&
                function_spaces)
-    : Form(function_spaces, FormIntegrals(), FormCoefficients({}), nullptr)
+    : Form(function_spaces, FormIntegrals(), FormCoefficients({}),
+           std::vector<std::pair<std::string,
+                                 std::shared_ptr<const function::Constant>>>(),
+           nullptr)
 {
   // Do nothing
 }
 //-----------------------------------------------------------------------------
-std::size_t Form::rank() const { return _function_spaces.size(); }
+int Form::rank() const { return _function_spaces.size(); }
 //-----------------------------------------------------------------------------
 void Form::set_coefficients(
     std::map<std::size_t, std::shared_ptr<const function::Function>>
@@ -70,21 +77,45 @@ void Form::set_coefficients(
     _coefficients.set(c.first, c.second);
 }
 //-----------------------------------------------------------------------------
-std::size_t Form::original_coefficient_position(std::size_t i) const
+int Form::original_coefficient_position(int i) const
 {
   return _coefficients.original_position(i);
 }
 //-----------------------------------------------------------------------------
-std::size_t Form::max_element_tensor_size() const
+void Form::set_constants(
+    std::map<std::string, std::shared_ptr<const function::Constant>> constants)
 {
-  std::size_t num_entries = 1;
-  for (auto& V : _function_spaces)
+  for (auto const& constant : constants)
   {
-    assert(V->dofmap);
-    assert(V->dofmap->element_dof_layout);
-    num_entries *= V->dofmap->element_dof_layout->num_dofs();
+    std::string name = constant.first;
+
+    // Find matching string in existing constants
+    const auto it = std::find_if(
+        _constants.begin(), _constants.end(),
+        [&](const std::pair<std::string,
+                            std::shared_ptr<const function::Constant>>& q) {
+          return (q.first == name);
+        });
+
+    if (it == _constants.end())
+      throw std::runtime_error("Constant '" + name + "' not found in form");
+
+    it->second = constant.second;
   }
-  return num_entries;
+}
+//-----------------------------------------------------------------------------
+void Form::set_constants(
+    std::vector<std::shared_ptr<const function::Constant>> constants)
+{
+  if (constants.size() != _constants.size())
+    throw std::runtime_error("Incorrect number of constants.");
+
+  // Loop every constant that user wants to attach
+  for (std::size_t i = 0; i < constants.size(); ++i)
+  {
+    // In this case, the constants don't have names
+    _constants[i] = std::make_pair("", constants[i]);
+  }
 }
 //-----------------------------------------------------------------------------
 void Form::set_mesh(std::shared_ptr<const mesh::Mesh> mesh)
@@ -100,22 +131,14 @@ std::shared_ptr<const mesh::Mesh> Form::mesh() const
   return _mesh;
 }
 //-----------------------------------------------------------------------------
-std::shared_ptr<const function::FunctionSpace>
-Form::function_space(std::size_t i) const
+std::shared_ptr<const function::FunctionSpace> Form::function_space(int i) const
 {
-  assert(i < _function_spaces.size());
-  return _function_spaces[i];
-}
-//-----------------------------------------------------------------------------
-std::vector<std::shared_ptr<const function::FunctionSpace>>
-Form::function_spaces() const
-{
-  return _function_spaces;
+  return _function_spaces.at(i);
 }
 //-----------------------------------------------------------------------------
 void Form::register_tabulate_tensor_cell(
-    int i, void (*fn)(PetscScalar*, const PetscScalar*, const double*,
-                      const int*, const int*))
+    int i, void (*fn)(PetscScalar*, const PetscScalar*, const PetscScalar*,
+                      const double*, const int*, const int*))
 {
   _integrals.register_tabulate_tensor(FormIntegrals::Type::cell, i, fn);
   if (i == -1 and _mesh)
@@ -146,6 +169,22 @@ void Form::set_vertex_domains(
 {
   _integrals.set_domains(FormIntegrals::Type::vertex, vertex_domains);
 }
+//-----------------------------------------------------------------------------
+fem::FormCoefficients& Form::coefficients() { return _coefficients; }
+//-----------------------------------------------------------------------------
+const fem::FormCoefficients& Form::coefficients() const
+{
+  return _coefficients;
+}
+//-----------------------------------------------------------------------------
+const std::vector<
+    std::pair<std::string, std::shared_ptr<const function::Constant>>>&
+Form::constants() const
+{
+  return _constants;
+}
+//-----------------------------------------------------------------------------
+const fem::FormIntegrals& Form::integrals() const { return _integrals; }
 //-----------------------------------------------------------------------------
 std::shared_ptr<const fem::CoordinateMapping> Form::coordinate_mapping() const
 {

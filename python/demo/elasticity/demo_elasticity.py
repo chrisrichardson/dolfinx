@@ -6,20 +6,21 @@
 
 # This demo solves the equations of static linear elasticity for a
 # pulley subjected to centripetal accelerations. The solver uses
-# smoothed aggregation algerbaric multigrid.
+# smoothed aggregation algebraic multigrid.
 
 from contextlib import ExitStack
 
 import numpy as np
-from petsc4py import PETSc
 
 import dolfin
-from dolfin import (MPI, BoxMesh, CellType, DirichletBC, Function,
+from dolfin import (MPI, BoxMesh, DirichletBC, Function,
                     TestFunction, TrialFunction, VectorFunctionSpace, cpp)
 from dolfin.fem import apply_lifting, assemble_matrix, assemble_vector, set_bc
 from dolfin.io import XDMFFile
-from dolfin.la import PETScKrylovSolver, PETScOptions, VectorSpaceBasis
-from ufl import Identity, as_vector, dx, grad, inner, sym, tr
+from dolfin.la import VectorSpaceBasis
+from dolfin.cpp.mesh import CellType
+from ufl import Identity, as_vector, dx, grad, inner, sym, tr, SpatialCoordinate
+from petsc4py import PETSc
 
 
 def build_nullspace(V):
@@ -64,7 +65,7 @@ def build_nullspace(V):
 mesh = BoxMesh(
     MPI.comm_world, [np.array([0.0, 0.0, 0.0]),
                      np.array([2.0, 1.0, 1.0])], [12, 12, 12],
-    CellType.Type.tetrahedron, dolfin.cpp.mesh.GhostMode.none)
+    CellType.tetrahedron, dolfin.cpp.mesh.GhostMode.none)
 cmap = dolfin.fem.create_coordinate_map(mesh.ufl_domain())
 mesh.geometry.coord_mapping = cmap
 
@@ -74,7 +75,7 @@ mesh.geometry.coord_mapping = cmap
 #    return (x[0]*x[0] + x[1]*x[1]) < r*r and on_boundary
 
 
-def boundary(x, only_boundary):
+def boundary(x):
     return np.logical_or(x[:, 0] < 10.0 * np.finfo(float).eps,
                          x[:, 0] > 1.0 - 10.0 * np.finfo(float).eps)
 
@@ -84,9 +85,8 @@ omega = 300.0
 rho = 10.0
 
 # Loading due to centripetal acceleration (rho*omega^2*x_i)
-# f = Expression(("rho*omega*omega*x[0]", "rho*omega*omega*x[1]", "0.0"),
-
-f = as_vector((0.0, 1.0E+10, 0.0))
+x = SpatialCoordinate(mesh)
+f = as_vector((rho * omega**2 * x[0], rho * omega**2 * x[1], 0.0))
 
 # Elasticity parameters
 E = 1.0e9
@@ -112,7 +112,7 @@ a = inner(sigma(u), grad(v)) * dx
 L = inner(f, v) * dx
 
 u0 = Function(V)
-with u0.vector().localForm() as bc_local:
+with u0.vector.localForm() as bc_local:
     bc_local.set(0.0)
 
 # Set up boundary condition on inner surface
@@ -137,37 +137,36 @@ null_space = build_nullspace(V)
 A.setNearNullSpace(null_space)
 
 # Set solver options
-PETScOptions.set("ksp_view")
-PETScOptions.set("ksp_type", "cg")
-PETScOptions.set("ksp_rtol", 1.0e-12)
-PETScOptions.set("pc_type", "gamg")
+opts = PETSc.Options()
+opts["ksp_type"] = "cg"
+opts["ksp_rtol"] = 1.0e-12
+opts["pc_type"] = "gamg"
 
 # Use Chebyshev smoothing for multigrid
-PETScOptions.set("mg_levels_ksp_type", "chebyshev")
-PETScOptions.set("mg_levels_pc_type", "jacobi")
+opts["mg_levels_ksp_type"] = "chebyshev"
+opts["mg_levels_pc_type"] = "jacobi"
 
 # Improve estimate of eigenvalues for Chebyshev smoothing
-PETScOptions.set("mg_levels_esteig_ksp_type", "cg")
-PETScOptions.set("mg_levels_ksp_chebyshev_esteig_steps", 20)
-
-# Monitor solver
-PETScOptions.set("ksp_monitor")
+opts["mg_levels_esteig_ksp_type"] = "cg"
+opts["mg_levels_ksp_chebyshev_esteig_steps"] = 20
 
 # Create CG Krylov solver and turn convergence monitoring on
-solver = PETScKrylovSolver(MPI.comm_world)
-solver.set_from_options()
+solver = PETSc.KSP().create(MPI.comm_world)
+solver.setFromOptions()
 
 # Set matrix operator
-solver.set_operator(A)
+solver.setOperators(A)
 
 # Compute solution
-solver.solve(u.vector(), b)
+solver.setMonitor(lambda ksp, its, rnorm: print("Iteration: {}, rel. residual: {}".format(its, rnorm)))
+solver.solve(b, u.vector)
+solver.view()
 
 # Save solution to XDMF format
 file = XDMFFile(MPI.comm_world, "elasticity.xdmf")
 file.write(u)
 
-unorm = u.vector().norm()
+unorm = u.vector.norm()
 if MPI.rank(mesh.mpi_comm()) == 0:
     print("Solution vector norm:", unorm)
 

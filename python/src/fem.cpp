@@ -4,7 +4,7 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include "casters.h"
+#include "caster_petsc.h"
 #include <Eigen/Dense>
 #include <dolfin/common/IndexMap.h>
 #include <dolfin/common/types.h>
@@ -19,11 +19,13 @@
 #include <dolfin/fem/PETScDMCollection.h>
 #include <dolfin/fem/assembler.h>
 #include <dolfin/fem/utils.h>
+#include <dolfin/function/Constant.h>
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/la/PETScMatrix.h>
 #include <dolfin/la/PETScVector.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/MeshFunction.h>
 #include <memory>
 #include <petsc4py/petsc4py.h>
 #include <pybind11/eigen.h>
@@ -152,8 +154,6 @@ void fem(py::module& m)
       .def("dof_reference_coordinates",
            &dolfin::fem::FiniteElement::dof_reference_coordinates)
       .def("space_dimension", &dolfin::fem::FiniteElement::space_dimension)
-      .def("topological_dimension",
-           &dolfin::fem::FiniteElement::topological_dimension)
       .def("value_dimension", &dolfin::fem::FiniteElement::value_dimension)
       .def("signature", &dolfin::fem::FiniteElement::signature);
 
@@ -205,8 +205,7 @@ void fem(py::module& m)
                     std::shared_ptr<const dolfin::function::Function>,
                     const std::function<Eigen::Array<bool, Eigen::Dynamic, 1>(
                         const Eigen::Ref<const Eigen::Array<
-                            double, Eigen::Dynamic, 3, Eigen::RowMajor>>&,
-                        bool only_boundary)>&,
+                            double, Eigen::Dynamic, 3, Eigen::RowMajor>>&)>&,
                     dolfin::fem::DirichletBC::Method>(),
            py::arg("V"), py::arg("g"), py::arg("mark"), py::arg("method"))
       .def(py::init<std::shared_ptr<const dolfin::function::FunctionSpace>,
@@ -277,15 +276,21 @@ void fem(py::module& m)
       .def(py::init<std::vector<
                std::shared_ptr<const dolfin::function::FunctionSpace>>>())
       .def("num_coefficients",
-           [](const dolfin::fem::Form& self) { return self.coeffs().size(); },
+           [](const dolfin::fem::Form& self) {
+             return self.coefficients().size();
+           },
            "Return number of coefficients in form")
       .def("original_coefficient_position",
            &dolfin::fem::Form::original_coefficient_position)
       .def("set_coefficient",
            [](dolfin::fem::Form& self, std::size_t i,
               std::shared_ptr<const dolfin::function::Function> f) {
-             self.coeffs().set(i, f);
+             self.coefficients().set(i, f);
            })
+      .def("set_constants",
+           py::overload_cast<
+               std::vector<std::shared_ptr<const dolfin::function::Constant>>>(
+               &dolfin::fem::Form::set_constants))
       .def("set_mesh", &dolfin::fem::Form::set_mesh)
       .def("set_cell_domains", &dolfin::fem::Form::set_cell_domains)
       .def("set_exterior_facet_domains",
@@ -295,9 +300,9 @@ void fem(py::module& m)
       .def("set_vertex_domains", &dolfin::fem::Form::set_vertex_domains)
       .def("set_tabulate_cell",
            [](dolfin::fem::Form& self, int i, std::intptr_t addr) {
-             auto tabulate_tensor_ptr
-                 = (void (*)(PetscScalar*, const PetscScalar*, const double*,
-                             const int*, const int*))addr;
+             auto tabulate_tensor_ptr = (void (*)(
+                 PetscScalar*, const PetscScalar*, const PetscScalar*,
+                 const double*, const int*, const int*))addr;
              self.register_tabulate_tensor_cell(i, tabulate_tensor_ptr);
            })
       .def_property_readonly("rank", &dolfin::fem::Form::rank)

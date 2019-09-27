@@ -21,10 +21,10 @@
 #    docker run -p 8888:8888 -v "$(pwd)":/tmp quay.io/fenicsproject/dolfinx:notebook
 #
 
-ARG GMSH_VERSION=4.4.0
+ARG GMSH_VERSION=4.4.1
 ARG PYBIND11_VERSION=2.3.0
 ARG PETSC_VERSION=3.11.3
-ARG SLEPC_VERSION=3.11.1
+ARG SLEPC_VERSION=3.11.2
 ARG PETSC4PY_VERSION=3.11.0
 ARG SLEPC4PY_VERSION=3.11.0
 ARG TINI_VERSION=v0.18.0
@@ -87,6 +87,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
         doxygen \
         git \
         graphviz \
+        sudo \
         valgrind \
         wget && \
     apt-get -y install \
@@ -149,7 +150,7 @@ WORKDIR /tmp
 # Install PETSc and SLEPc with real types.
 RUN apt-get -qq update && \
     apt-get -y install bison flex python && \
-    wget -nc --quiet https://bitbucket.org/petsc/petsc/get/v${PETSC_VERSION}.tar.gz -O petsc-${PETSC_VERSION}.tar.gz && \
+    wget -nc --quiet http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-${PETSC_VERSION}.tar.gz -O petsc-${PETSC_VERSION}.tar.gz && \
     mkdir -p petsc-src && tar -xf petsc-${PETSC_VERSION}.tar.gz -C petsc-src --strip-components 1 && \
     cd petsc-src && \
     ./configure \
@@ -212,7 +213,7 @@ WORKDIR /tmp
 # Install PETSc and SLEPc with complex scalar types
 RUN apt-get -qq update && \
     apt-get -y install bison flex python && \
-    wget -nc --quiet https://bitbucket.org/petsc/petsc/get/v${PETSC_VERSION}.tar.gz -O petsc-${PETSC_VERSION}.tar.gz && \
+    wget -nc --quiet http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-lite-${PETSC_VERSION}.tar.gz -O petsc-${PETSC_VERSION}.tar.gz && \
     mkdir -p petsc-src && tar -xf petsc-${PETSC_VERSION}.tar.gz -C petsc-src --strip-components 1 && \
     cd petsc-src && \
     ./configure \
@@ -266,8 +267,8 @@ WORKDIR /tmp
 # Install ipython (optional), FIAT, UFL and ffcX (development
 # versions, master branch)
 RUN pip3 install --no-cache-dir ipython && \
-    pip3 install --no-cache-dir git+https://bitbucket.org/fenics-project/fiat.git && \
-    pip3 install --no-cache-dir git+https://bitbucket.org/fenics-project/ufl.git && \
+    pip3 install --no-cache-dir git+https://github.com/FEniCS/fiat.git && \
+    pip3 install --no-cache-dir git+https://github.com/FEniCS/ufl.git && \
     pip3 install --no-cache-dir git+https://github.com/fenics/ffcX
 
 # Install dolfinx
@@ -295,8 +296,8 @@ WORKDIR /tmp
 # Install ipython (optional), FIAT, UFL and ffcX (development versions,
 # master branch)
 RUN pip3 install --no-cache-dir ipython && \
-    pip3 install --no-cache-dir git+https://bitbucket.org/fenics-project/fiat.git && \
-    pip3 install --no-cache-dir git+https://bitbucket.org/fenics-project/ufl.git && \
+    pip3 install --no-cache-dir git+https://github.com/FEniCS/fiat.git && \
+    pip3 install --no-cache-dir git+https://github.com/FEniCS/ufl.git && \
     pip3 install --no-cache-dir git+https://github.com/fenics/ffcX
 
 # Install dolfinx

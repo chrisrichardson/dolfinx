@@ -18,6 +18,7 @@ Topology::Topology(std::size_t dim, std::int32_t num_vertices,
                    std::int64_t num_vertices_global)
     : _num_vertices(num_vertices), _ghost_offset_index(dim + 1, 0),
       _global_num_entities(dim + 1, -1), _global_indices(dim + 1),
+      _shared_entities(dim + 1),
       _connectivity(dim + 1,
                     std::vector<std::shared_ptr<Connectivity>>(dim + 1))
 {
@@ -113,13 +114,15 @@ bool Topology::have_global_indices(std::size_t dim) const
   return !_global_indices[dim].empty();
 }
 //-----------------------------------------------------------------------------
-bool Topology::have_shared_entities(int dim) const
-{
-  return (_shared_entities.find(dim) != _shared_entities.end());
-}
-//-----------------------------------------------------------------------------
 std::map<std::int32_t, std::set<std::int32_t>>&
 Topology::shared_entities(int dim)
+{
+  assert(dim <= this->dim());
+  return _shared_entities[dim];
+}
+//-----------------------------------------------------------------------------
+const std::map<std::int32_t, std::set<std::int32_t>>&
+Topology::shared_entities(int dim) const
 {
   assert(dim <= this->dim());
   return _shared_entities[dim];
@@ -130,6 +133,58 @@ std::vector<std::int32_t>& Topology::cell_owner() { return _cell_owner; }
 const std::vector<std::int32_t>& Topology::cell_owner() const
 {
   return _cell_owner;
+}
+//-----------------------------------------------------------------------------
+std::vector<bool> Topology::on_boundary(int dim) const
+{
+  const int tdim = this->dim();
+  if (dim >= tdim or dim < 0)
+  {
+    throw std::runtime_error("Invalid entity dimension: "
+                             + std::to_string(dim));
+  }
+
+  std::shared_ptr<const Connectivity> connectivity_facet_cell
+      = connectivity(tdim - 1, tdim);
+  if (!connectivity_facet_cell)
+    throw std::runtime_error("Facet-cell connectivity missing");
+
+  std::vector<bool> marker(this->size(dim), false);
+  const int num_facets = this->size(tdim - 1);
+
+  // Special case for facets
+  if (dim == tdim - 1)
+  {
+    for (int i = 0; i < num_facets; ++i)
+    {
+      if (connectivity_facet_cell->size_global(i) == 1)
+        marker[i] = true;
+    }
+    return marker;
+  }
+
+  // Get connectivity from facet to entities of interest (vertices or edges)
+  std::shared_ptr<const Connectivity> connectivity_facet_entity
+      = connectivity(tdim - 1, dim);
+  if (!connectivity_facet_entity)
+    throw std::runtime_error("Facet-entity connectivity missing");
+
+  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& fe_offsets
+      = connectivity_facet_entity->entity_positions();
+  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& fe_indices
+      = connectivity_facet_entity->connections();
+
+  // Iterate over all facets, selecting only those with one cell attached
+  for (int i = 0; i < num_facets; ++i)
+  {
+    if (connectivity_facet_cell->size_global(i) == 1)
+    {
+      for (int j = fe_offsets[i]; j < fe_offsets[i + 1]; ++j)
+        marker[fe_indices[j]] = true;
+    }
+  }
+
+  return marker;
 }
 //-----------------------------------------------------------------------------
 std::shared_ptr<Connectivity> Topology::connectivity(std::size_t d0,
@@ -154,19 +209,6 @@ void Topology::set_connectivity(std::shared_ptr<Connectivity> c, std::size_t d0,
   assert(d0 < _connectivity.size());
   assert(d1 < _connectivity[d0].size());
   _connectivity[d0][d1] = c;
-}
-//-----------------------------------------------------------------------------
-const std::map<std::int32_t, std::set<std::int32_t>>&
-Topology::shared_entities(int dim) const
-{
-  auto e = _shared_entities.find(dim);
-  if (e == _shared_entities.end())
-  {
-    throw std::runtime_error(
-        "Shared mesh entities have not been computed for dim "
-        + std::to_string(dim));
-  }
-  return e->second;
 }
 //-----------------------------------------------------------------------------
 size_t Topology::hash() const

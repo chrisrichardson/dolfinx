@@ -11,7 +11,7 @@ from petsc4py import PETSc
 
 import dolfin
 import ufl
-from dolfin.function.specialfunctions import SpatialCoordinate
+from dolfin.specialfunctions import SpatialCoordinate
 from ufl import dx, grad, inner
 
 pytestmark = pytest.mark.skipif(
@@ -23,10 +23,10 @@ def test_complex_assembly():
 
     mesh = dolfin.generation.UnitSquareMesh(dolfin.MPI.comm_world, 10, 10)
     P2 = ufl.FiniteElement("Lagrange", mesh.ufl_cell(), 2)
-    V = dolfin.function.functionspace.FunctionSpace(mesh, P2)
+    V = dolfin.functionspace.FunctionSpace(mesh, P2)
 
-    u = dolfin.function.argument.TrialFunction(V)
-    v = dolfin.function.argument.TestFunction(V)
+    u = dolfin.function.TrialFunction(V)
+    v = dolfin.function.TestFunction(V)
 
     g = -2 + 3.0j
     j = 1.0j
@@ -79,7 +79,7 @@ def test_complex_assembly_solve():
     degree = 3
     mesh = dolfin.generation.UnitSquareMesh(dolfin.MPI.comm_world, 20, 20)
     P = ufl.FiniteElement("Lagrange", mesh.ufl_cell(), degree)
-    V = dolfin.function.functionspace.FunctionSpace(mesh, P)
+    V = dolfin.functionspace.FunctionSpace(mesh, P)
 
     x = SpatialCoordinate(mesh)
 
@@ -88,8 +88,8 @@ def test_complex_assembly_solve():
     f = (1. + 1j) * A * ufl.cos(2 * np.pi * x[0]) * ufl.cos(2 * np.pi * x[1])
 
     # Variational problem
-    u = dolfin.function.argument.TrialFunction(V)
-    v = dolfin.function.argument.TestFunction(V)
+    u = dolfin.function.TrialFunction(V)
+    v = dolfin.function.TestFunction(V)
     C = 1 + 1j
     a = C * inner(grad(u), grad(v)) * dx + C * inner(u, v) * dx
     L = inner(f, v) * dx
@@ -101,13 +101,14 @@ def test_complex_assembly_solve():
     b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
 
     # Create solver
-    solver = dolfin.cpp.la.PETScKrylovSolver(mesh.mpi_comm())
-    dolfin.cpp.la.PETScOptions.set("ksp_type", "preonly")
-    dolfin.cpp.la.PETScOptions.set("pc_type", "lu")
-    solver.set_from_options()
+    solver = PETSc.KSP().create(mesh.mpi_comm())
+    opts = PETSc.Options()
+    opts["ksp_type"] = "preonly"
+    opts["pc_type"] = "lu"
+    solver.setFromOptions()
     x = A.createVecRight()
-    solver.set_operator(A)
-    solver.solve(x, b)
+    solver.setOperators(A)
+    solver.solve(b, x)
 
     # Reference Solution
     def ref_eval(values, x):
@@ -115,5 +116,5 @@ def test_complex_assembly_solve():
     u_ref = dolfin.interpolate(ref_eval, V)
 
     xnorm = x.norm(PETSc.NormType.N2)
-    x_ref_norm = u_ref.vector().norm(PETSc.NormType.N2)
+    x_ref_norm = u_ref.vector.norm(PETSc.NormType.N2)
     assert np.isclose(xnorm, x_ref_norm)

@@ -12,12 +12,11 @@
 #include <dolfin/fem/CoordinateMapping.h>
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
-#include <dolfin/mesh/Cell.h>
-#include <dolfin/mesh/Facet.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/MeshEntity.h>
 #include <dolfin/mesh/MeshFunction.h>
 #include <dolfin/mesh/MeshIterator.h>
-#include <dolfin/mesh/Vertex.h>
+#include <dolfin/mesh/cell_types.h>
 #include <map>
 #include <utility>
 
@@ -112,11 +111,12 @@ get_remote_bcs(const common::IndexMap& map, const common::IndexMap& map_g,
 std::vector<std::int32_t> marked_facets(
     const mesh::Mesh& mesh,
     const std::function<EigenArrayXb(
-        const Eigen::Ref<
-            const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>>&,
-        bool only_boundary)>& mark)
+        const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic, 3,
+                                            Eigen::RowMajor>>&)>& marker)
 {
   const int tdim = mesh.topology().dim();
+
+  // Create facets
   mesh.create_entities(tdim - 1);
 
   // Marked facet indices
@@ -134,38 +134,26 @@ std::vector<std::int32_t> marked_facets(
     mesh.create_connectivity(tdim - 1, tdim);
   }
 
-  // Find all vertices on boundary
-  // Set all to -1 (interior) to start with
-  // If a vertex is on the boundary, give it an index from [0, count)
+  // Find all vertices on boundary. Set all to -1 (interior) to start
+  // with. If a vertex is on the boundary, give it an index from [0,
+  // count)
+  const std::vector<bool> on_boundary0 = mesh.topology().on_boundary(0);
   std::vector<std::int32_t> boundary_vertex(mesh.num_entities(0), -1);
-  std::size_t count = 0;
-  for (const auto& facet : mesh::MeshRange<mesh::Facet>(mesh))
+  assert(on_boundary0.size() == boundary_vertex.size());
+  int count = 0;
+  for (std::size_t i = 0; i < on_boundary0.size(); ++i)
   {
-    if (facet.num_global_entities(tdim) == 1)
-    {
-      const std::int32_t* v = facet.entities(0);
-      for (unsigned int i = 0; i != facet.num_entities(0); ++i)
-      {
-        if (boundary_vertex[v[i]] == -1)
-        {
-          boundary_vertex[v[i]] = count;
-          ++count;
-        }
-      }
-    }
+    if (on_boundary0[i])
+      boundary_vertex[i] = count++;
   }
 
+  // FIXME: Does this make sense for non-affine elements?
+  // Get all points
   const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& x_all
       = mesh.geometry().points();
 
-  // Run marker function on all vertices
-  EigenArrayXb all_marked = mark(x_all, false);
-  assert(all_marked.rows() == x_all.rows());
-
-  EigenRowArrayXXd x_boundary(count, 3);
-
-  // Pack boundary vertices for vectorised marking
-  // function
+  // Pack coordinates of all boundary vertices
+  Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor> x_boundary(count, 3);
   for (std::int32_t i = 0; i < mesh.num_entities(0); ++i)
   {
     if (boundary_vertex[i] != -1)
@@ -173,44 +161,40 @@ std::vector<std::int32_t> marked_facets(
   }
 
   // Run marker function on boundary vertices
-  EigenArrayXb boundary_marked = mark(x_boundary, true);
+  const EigenArrayXb boundary_marked = marker(x_boundary);
   assert(boundary_marked.rows() == x_boundary.rows());
 
-  for (auto& facet : mesh::MeshRange<mesh::Facet>(mesh))
+  // Iterate over facets
+  const std::vector<bool> boundary_facet
+      = mesh.topology().on_boundary(tdim - 1);
+  for (auto& facet : mesh::MeshRange(mesh, tdim - 1))
   {
-
-    // By default, all vertices on this facet are marked
-    bool all_vertices_marked = true;
-
-    for (const auto& v : mesh::EntityRange<mesh::Vertex>(facet))
+    // Consider boundary facets only
+    if (boundary_facet[facet.index()])
     {
-      const std::int32_t idx = v.index();
+      // Assume all vertices on this facet are marked
+      bool all_vertices_marked = true;
 
-      // The vertex is not marked (marked as false) in two cases:
-      // 1. It is a boundary vertex and both evaluations of mark function
-      //    (only_boundary=true and only_boundary=false)
-      //    marked it as false
-      // or
-      // 2. It is not a boundary vertex and only_boundary=false marked it
-      // as false
-      //
-      if ((boundary_vertex[idx] != -1
-           and (all_marked[idx] == false
-                and boundary_marked[boundary_vertex[idx]] == false))
-          or (boundary_vertex[idx] == -1 and all_marked[idx] == false))
+      // Iterate over facet vertices
+      for (const auto& v : mesh::EntityRange(facet, 0))
       {
-        all_vertices_marked = false;
-        break;
+        const std::int32_t idx = v.index();
+        assert(boundary_vertex[idx] < boundary_marked.size());
+        if (!boundary_marked[boundary_vertex[idx]])
+        {
+          all_vertices_marked = false;
+          break;
+        }
       }
-    }
 
-    // Mark facet with all vertices marked
-    if (all_vertices_marked)
-      facets.push_back(facet.index());
+      // Mark facet with all vertices marked
+      if (all_vertices_marked)
+        facets.push_back(facet.index());
+    }
   }
 
   return facets;
-}
+} // namespace
 //-----------------------------------------------------------------------------
 // bool on_facet(
 //     const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic, 1>>
@@ -286,18 +270,18 @@ compute_bc_dofs_topological(const function::FunctionSpace& V,
                             const std::vector<std::int32_t>& facets)
 {
   // Get mesh
-  assert(V.mesh);
-  const mesh::Mesh& mesh = *V.mesh;
+  assert(V.mesh());
+  const mesh::Mesh& mesh = *V.mesh();
   const std::size_t tdim = mesh.topology().dim();
 
   // Get dofmap
-  assert(V.dofmap);
-  const DofMap& dofmap = *V.dofmap;
+  assert(V.dofmap());
+  const DofMap& dofmap = *V.dofmap();
   const DofMap* dofmap_g = &dofmap;
   if (Vg)
   {
-    assert(Vg->dofmap);
-    dofmap_g = Vg->dofmap.get();
+    assert(Vg->dofmap());
+    dofmap_g = Vg->dofmap().get();
   }
 
   // Initialise facet-cell connectivity
@@ -310,9 +294,8 @@ compute_bc_dofs_topological(const function::FunctionSpace& V,
       = dofmap.element_dof_layout->num_entity_closure_dofs(tdim - 1);
 
   // Build vector local dofs for each cell facet
-  const mesh::CellType& cell_type = mesh.type();
   std::vector<Eigen::Array<int, Eigen::Dynamic, 1>> facet_dofs;
-  for (std::size_t i = 0; i < cell_type.num_entities(tdim - 1); ++i)
+  for (int i = 0; i < mesh::cell_num_entities(mesh.cell_type(), tdim - 1); ++i)
   {
     facet_dofs.push_back(
         dofmap.element_dof_layout->entity_closure_dofs(tdim - 1, i));
@@ -323,10 +306,9 @@ compute_bc_dofs_topological(const function::FunctionSpace& V,
   for (std::size_t f = 0; f < facets.size(); ++f)
   {
     // Create facet and attached cell
-    const mesh::Facet facet(mesh, facets[f]);
-    assert(facet.num_entities(tdim) > 0);
+    const mesh::MeshEntity facet(mesh, tdim - 1, facets[f]);
     const std::size_t cell_index = facet.entities(tdim)[0];
-    const mesh::Cell cell(mesh, cell_index);
+    const mesh::MeshEntity cell(mesh, tdim, cell_index);
 
     // Get cell dofmap
     const Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> cell_dofs
@@ -352,15 +334,10 @@ compute_bc_dofs_topological(const function::FunctionSpace& V,
 } // namespace
 
 //-----------------------------------------------------------------------------
-DirichletBC::DirichletBC(
-    std::shared_ptr<const function::FunctionSpace> V,
-    std::shared_ptr<const function::Function> g,
-    const std::function<Eigen::Array<bool, Eigen::Dynamic, 1>(
-        const Eigen::Ref<
-            const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>>&,
-        bool only_boundary)>& mark,
-    Method method)
-    : DirichletBC(V, g, marked_facets(*V->mesh, mark), method)
+DirichletBC::DirichletBC(std::shared_ptr<const function::FunctionSpace> V,
+                         std::shared_ptr<const function::Function> g,
+                         const marking_function& mark, Method method)
+    : DirichletBC(V, g, marked_facets(*V->mesh(), mark), method)
 {
   // Do nothing
 }
@@ -376,16 +353,16 @@ DirichletBC::DirichletBC(std::shared_ptr<const function::FunctionSpace> V,
   assert(g->function_space());
   if (V != g->function_space())
   {
-    assert(V->mesh);
-    assert(g->function_space()->mesh);
-    if (V->mesh != g->function_space()->mesh)
+    assert(V->mesh());
+    assert(g->function_space()->mesh());
+    if (V->mesh() != g->function_space()->mesh())
     {
       throw std::runtime_error("Boundary condition function and constrained "
                                "function do not share mesh.");
     }
 
-    assert(g->function_space()->element);
-    if (!V->has_element(*g->function_space()->element))
+    assert(g->function_space()->element());
+    if (!V->has_element(*g->function_space()->element()))
     {
       throw std::runtime_error("Boundary condition function and constrained "
                                "function do not have same element.");
@@ -417,8 +394,8 @@ DirichletBC::DirichletBC(std::shared_ptr<const function::FunctionSpace> V,
   // were found by other processes, e.g. a vertex dof on this process that
   // has no connected factes on the boundary.
   const std::vector<std::array<PetscInt, 2>> dofs_remote
-      = get_remote_bcs(*V->dofmap->index_map,
-                       *g->function_space()->dofmap->index_map, dofs_local);
+      = get_remote_bcs(*V->dofmap()->index_map,
+                       *g->function_space()->dofmap()->index_map, dofs_local);
 
   // Add received bc indices to dofs_local
   for (auto& dof_remote : dofs_remote)
