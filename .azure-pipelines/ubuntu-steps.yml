@@ -24,7 +24,7 @@ steps:
 
 - bash: |
     # source $HOME/FEniCS/share/dolfin/dolfin.conf
-    pip3 -v --no-deps install .
+    pip3 install -e .
   displayName: Build and install Python interface
   workingDirectory: python
 
