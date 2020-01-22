@@ -40,7 +40,7 @@ if (NOT DOLFIN_USE_FILE_INCLUDED)
   if (NOT PETSC::petsc)
     set(DOLFIN_SKIP_BUILD_TESTS TRUE)
     list(APPEND CMAKE_MODULE_PATH "@CMAKE_INSTALL_PREFIX@/@DOLFIN_SHARE_DIR@/cmake")
-    find_package(PETSc REQUIRED QUIET)
+    find_package(PETSc REQUIRED)
    endif()
 
   if (@SLEPC_FOUND@)
