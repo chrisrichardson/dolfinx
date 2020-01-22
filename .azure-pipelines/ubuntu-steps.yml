@@ -31,7 +31,9 @@ steps:
 
 - bash: |
     # source $HOME/FEniCS/share/dolfin/dolfin.conf
-    source /usr/local/share/dolfin/dolfin.conf
+    # source /usr/local/share/dolfin/dolfin.conf
+    # export $LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+    cat /usr/local/share/dolfin/dolfin.conf
     echo $PETSC_DIR
     echo $HOME
     which pip3
@@ -39,7 +41,7 @@ steps:
     echo $PWD
     sudo pip3 install -v .
     echo "Post-pip"
-    displayName: Build and install Python interface
+  displayName: Build and install Python interface
   workingDirectory: python
 
 - bash: |
