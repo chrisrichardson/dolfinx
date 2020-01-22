@@ -36,8 +36,9 @@ steps:
     which pip3
     pip3 -V
     echo $PWD
-    pip3 install -v .
-  displayName: Build and install Python interface
+    sudo pip3 install -v .
+    echo "Post-pip"
+    displayName: Build and install Python interface
   workingDirectory: python
 
 - bash: |
