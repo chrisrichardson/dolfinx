@@ -33,7 +33,9 @@ steps:
     # source $HOME/FEniCS/share/dolfin/dolfin.conf
     # source /usr/local/share/dolfin/dolfin.conf
     # export $LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+    echo "--------------------"
     cat /usr/local/share/dolfin/dolfin.conf
+    echo "--------------------"
     echo $PETSC_DIR
     echo $HOME
     which pip3
