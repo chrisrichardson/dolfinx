@@ -30,7 +30,7 @@ steps:
 - bash: |
     # source $HOME/FEniCS/share/dolfin/dolfin.conf
     echo $PETSC_DIR
-    pip3 install -e .
+    # pip3 install -e .
   displayName: Build and install Python interface
   workingDirectory: python
 
