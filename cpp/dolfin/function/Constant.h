@@ -26,12 +26,11 @@ public:
   Constant(PetscScalar c);
 
   /// Create a rank-1 (vector-valued) constant
-  Constant(std::vector<PetscScalar> c);
+  Constant(const std::vector<PetscScalar>& c);
 
   /// Create a rank-2 constant
   Constant(const Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic,
-                                         Eigen::Dynamic, Eigen::RowMajor>>
-               c);
+                                         Eigen::Dynamic, Eigen::RowMajor>>& c);
 
   /// Create an arbitrary rank constant. Data layout is row-major (C style).
   Constant(std::vector<int> shape, std::vector<PetscScalar> value);

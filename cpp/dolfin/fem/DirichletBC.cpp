@@ -9,7 +9,7 @@
 #include "FiniteElement.h"
 #include <array>
 #include <dolfin/common/IndexMap.h>
-#include <dolfin/fem/CoordinateMapping.h>
+#include <dolfin/fem/CoordinateElement.h>
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/mesh/Mesh.h>
@@ -89,7 +89,8 @@ get_remote_bcs(const common::IndexMap& map, const common::IndexMap& map_g,
 
   // Scatter (reverse) data from ghost processes to owner
   std::vector<PetscInt> marker_owner_rcvd(bs * size_owned, -1);
-  map.scatter_rev(marker_owner_rcvd, marker_ghost, bs, MPI_MAX);
+  map.scatter_rev(marker_owner_rcvd, marker_ghost, bs,
+                  common::IndexMap::Mode::insert);
   assert((int)marker_owner_rcvd.size() == size_owned * bs);
   for (std::size_t i = 0; i < marker_owner_rcvd.size(); ++i)
   {
@@ -110,8 +111,8 @@ get_remote_bcs(const common::IndexMap& map, const common::IndexMap& map_g,
 // Return list of facet indices that are marked
 std::vector<std::int32_t> marked_facets(
     const mesh::Mesh& mesh,
-    const std::function<EigenArrayXb(
-        const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic, 3,
+    const std::function<Eigen::Array<bool, Eigen::Dynamic, 1>(
+        const Eigen::Ref<const Eigen::Array<double, 3, Eigen::Dynamic,
                                             Eigen::RowMajor>>&)>& marker)
 {
   const int tdim = mesh.topology().dim();
@@ -153,16 +154,18 @@ std::vector<std::int32_t> marked_facets(
       = mesh.geometry().points();
 
   // Pack coordinates of all boundary vertices
-  Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor> x_boundary(count, 3);
+  Eigen::Array<double, 3, Eigen::Dynamic, Eigen::RowMajor> x_boundary(3, count);
   for (std::int32_t i = 0; i < mesh.num_entities(0); ++i)
   {
     if (boundary_vertex[i] != -1)
-      x_boundary.row(boundary_vertex[i]) = x_all.row(i);
+      x_boundary.col(boundary_vertex[i]) = x_all.row(i);
   }
 
   // Run marker function on boundary vertices
-  const EigenArrayXb boundary_marked = marker(x_boundary);
-  assert(boundary_marked.rows() == x_boundary.rows());
+  const Eigen::Array<bool, Eigen::Dynamic, 1> boundary_marked
+      = marker(x_boundary);
+  if (boundary_marked.rows() != x_boundary.cols())
+    throw std::runtime_error("Length of array of boundary markers is wrong.");
 
   // Iterate over facets
   const std::vector<bool> boundary_facet
@@ -179,7 +182,7 @@ std::vector<std::int32_t> marked_facets(
       for (const auto& v : mesh::EntityRange(facet, 0))
       {
         const std::int32_t idx = v.index();
-        assert(boundary_vertex[idx] < boundary_marked.size());
+        assert(boundary_vertex[idx] < boundary_marked.rows());
         if (!boundary_marked[boundary_vertex[idx]])
         {
           all_vertices_marked = false;
@@ -311,10 +314,8 @@ compute_bc_dofs_topological(const function::FunctionSpace& V,
     const mesh::MeshEntity cell(mesh, tdim, cell_index);
 
     // Get cell dofmap
-    const Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> cell_dofs
-        = dofmap.cell_dofs(cell.index());
-    const Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>
-        cell_dofs_g = dofmap_g->cell_dofs(cell.index());
+    auto cell_dofs = dofmap.cell_dofs(cell.index());
+    auto cell_dofs_g = dofmap_g->cell_dofs(cell.index());
 
     // Loop over facet dofs
     const size_t facet_local_index = cell.index(facet);
@@ -392,7 +393,7 @@ DirichletBC::DirichletBC(std::shared_ptr<const function::FunctionSpace> V,
 
   // Get bc dof indices (local) in (V, Vg) spaces on this process that
   // were found by other processes, e.g. a vertex dof on this process that
-  // has no connected factes on the boundary.
+  // has no connected facets on the boundary.
   const std::vector<std::array<PetscInt, 2>> dofs_remote
       = get_remote_bcs(*V->dofmap()->index_map,
                        *g->function_space()->dofmap()->index_map, dofs_local);
@@ -417,6 +418,13 @@ DirichletBC::DirichletBC(std::shared_ptr<const function::FunctionSpace> V,
 
   // Note: _dof_indices must be sorted
   _dof_indices = _dofs.col(0);
+
+  const int owned_size = V->dofmap()->index_map->block_size
+                         * V->dofmap()->index_map->size_local();
+  auto it
+      = std::lower_bound(_dof_indices.data(),
+                         _dof_indices.data() + _dof_indices.rows(), owned_size);
+  _owned_indices = std::distance(_dof_indices.data(), it);
 }
 //-----------------------------------------------------------------------------
 std::shared_ptr<const function::FunctionSpace>
@@ -430,10 +438,17 @@ std::shared_ptr<const function::Function> DirichletBC::value() const
   return _g;
 }
 //-----------------------------------------------------------------------------
-const Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>
+const Eigen::Array<PetscInt, Eigen::Dynamic, 1>&
 DirichletBC::dof_indices() const
 {
   return _dof_indices;
+}
+//-----------------------------------------------------------------------------
+Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>
+DirichletBC::dof_indices_owned() const
+{
+  return Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>(
+      _dof_indices.data(), _owned_indices);
 }
 //-----------------------------------------------------------------------------
 void DirichletBC::set(
@@ -449,34 +464,23 @@ void DirichletBC::set(
     if (_dofs(i, 0) < x.rows())
       x[_dofs(i, 0)] = scale * g.x[_dofs(i, 1)];
   }
-
-  // for (auto& dof : _dofs)
-  // {
-  //   if (dof[0] < x.rows())
-  //     x[dof[0]] = scale * g.x[dof[1]];
-  // }
 }
 //-----------------------------------------------------------------------------
 void DirichletBC::set(
     Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x,
-    const Eigen::Ref<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x0,
+    const Eigen::Ref<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>>& x0,
     double scale) const
 {
   // FIXME: This one excludes ghosts. Need to straighten out.
 
   assert(_g);
-  assert(x.rows() == x0.rows());
+  assert(x.rows() <= x0.rows());
   la::VecReadWrapper g(_g->vector().vec(), false);
   for (Eigen::Index i = 0; i < _dofs.rows(); ++i)
   {
     if (_dofs(i, 0) < x.rows())
       x[_dofs(i, 0)] = scale * (g.x[_dofs(i, 1)] - x0[_dofs(i, 0)]);
   }
-  // for (auto& dof : _dofs)
-  // {
-  //   if (dof[0] < x.rows())
-  //     x[dof[0]] = scale * (g.x[dof[1]] - x0[dof[0]]);
-  // }
 }
 //-----------------------------------------------------------------------------
 void DirichletBC::dof_values(
@@ -486,8 +490,6 @@ void DirichletBC::dof_values(
   la::VecReadWrapper g(_g->vector().vec());
   for (Eigen::Index i = 0; i < _dofs.rows(); ++i)
     values[_dofs(i, 0)] = g.x[_dofs(i, 1)];
-  // for (auto& dof : _dofs)
-  //   values[dof[0]] = g.x[dof[1]];
   g.restore();
 }
 //-----------------------------------------------------------------------------
@@ -552,9 +554,9 @@ void DirichletBC::mark_dofs(std::vector<bool>& markers) const
 //   if (!mesh.geometry().coord_mapping)
 //   {
 //     throw std::runtime_error(
-//         "CoordinateMapping has not been attached to mesh.");
+//         "CoordinateElement has not been attached to mesh.");
 //   }
-//   const CoordinateMapping& cmap = *mesh.geometry().coord_mapping;
+//   const CoordinateElement& cmap = *mesh.geometry().coord_mapping;
 
 //   // Create vertex coordinate holder
 //   Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>

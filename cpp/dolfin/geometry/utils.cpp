@@ -370,7 +370,7 @@ geometry::compute_collisions(const BoundingBoxTree& tree0,
                            tree1.num_bboxes() - 1, nullptr, nullptr, entities_0,
                            entities_1);
 
-  return std::make_pair(entities_0, entities_1);
+  return std::pair(entities_0, entities_1);
 }
 //-----------------------------------------------------------------------------
 std::pair<std::vector<int>, std::vector<int>>
@@ -386,7 +386,7 @@ geometry::compute_entity_collisions(const BoundingBoxTree& tree0,
                            tree1.num_bboxes() - 1, &mesh0, &mesh1, entities_0,
                            entities_1);
 
-  return std::make_pair(entities_0, entities_1);
+  return std::pair(entities_0, entities_1);
 }
 //-----------------------------------------------------------------------------
 std::vector<int> geometry::compute_collisions(const BoundingBoxTree& tree,
@@ -485,7 +485,7 @@ std::pair<int, double> geometry::compute_closest_entity(
 
   // Search point cloud to get a good starting guess
   std::pair<int, double> guess = compute_closest_point(tree_midpoint, p);
-  double r = guess.second;
+  const double r = guess.second;
 
   // Return if we have found the point
   if (r == 0.0)
@@ -493,7 +493,7 @@ std::pair<int, double> geometry::compute_closest_entity(
 
   // Call recursive find function
   std::pair<int, double> e = _compute_closest_entity(
-      tree, p, tree.num_bboxes() - 1, mesh, -1, r * r);
+      tree, p, tree.num_bboxes() - 1, mesh, guess.first, r * r);
 
   // Sanity check
   assert(e.first >= 0);

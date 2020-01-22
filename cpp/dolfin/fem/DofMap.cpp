@@ -53,8 +53,7 @@ fem::DofMap build_collapsed_dofmap(const DofMap& dofmap_view,
   std::vector<std::int32_t> dofs_view;
   for (std::int64_t i = 0; i < mesh.num_entities(tdim); ++i)
   {
-    Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> cell_dofs
-        = dofmap_view.cell_dofs(i);
+    auto cell_dofs = dofmap_view.cell_dofs(i);
     for (Eigen::Index dof = 0; dof < cell_dofs.rows(); ++dof)
       dofs_view.push_back(cell_dofs[dof]);
   }
@@ -99,7 +98,7 @@ fem::DofMap build_collapsed_dofmap(const DofMap& dofmap_view,
   dofmap_view.index_map->scatter_fwd(global_index, global_index_remote, 1);
 
   // Compute ghosts for collapsed dofmap
-  std::vector<std::int64_t> ghosts(num_unowned);
+  Eigen::Array<std::int64_t, Eigen::Dynamic, 1> ghosts(num_unowned);
   for (auto it = it_unowned0; it != dofs_view.end(); ++it)
   {
     const std::int32_t index = std::distance(it_unowned0, it) / bs;
@@ -119,7 +118,7 @@ fem::DofMap build_collapsed_dofmap(const DofMap& dofmap_view,
     old_to_new[dof] = count++;
 
   // Build new dofmap
-  Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> dof_array_view
+  const Eigen::Array<PetscInt, Eigen::Dynamic, 1>& dof_array_view
       = dofmap_view.dof_array();
   Eigen::Array<PetscInt, Eigen::Dynamic, 1> _dofmap(dof_array_view.size());
   for (Eigen::Index i = 0; i < _dofmap.size(); ++i)
@@ -188,10 +187,8 @@ DofMap::collapse(const mesh::Mesh& mesh) const
   const int tdim = mesh.topology().dim();
   for (std::int64_t c = 0; c < mesh.num_entities(tdim); ++c)
   {
-    Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> view_cell_dofs
-        = this->cell_dofs(c);
-    Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> cell_dofs
-        = dofmap_new->cell_dofs(c);
+    auto view_cell_dofs = this->cell_dofs(c);
+    auto cell_dofs = dofmap_new->cell_dofs(c);
     assert(view_cell_dofs.size() == cell_dofs.size());
 
     for (Eigen::Index j = 0; j < cell_dofs.size(); ++j)
@@ -201,7 +198,7 @@ DofMap::collapse(const mesh::Mesh& mesh) const
     }
   }
 
-  return std::make_pair(std::move(dofmap_new), std::move(collapsed_map));
+  return std::pair(std::move(dofmap_new), std::move(collapsed_map));
 }
 //-----------------------------------------------------------------------------
 void DofMap::set(Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x,
@@ -211,8 +208,7 @@ void DofMap::set(Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x,
     x[_dofmap[i]] = value;
 }
 //-----------------------------------------------------------------------------
-Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>
-DofMap::dof_array() const
+const Eigen::Array<PetscInt, Eigen::Dynamic, 1>& DofMap::dof_array() const
 {
   return _dofmap;
 }
@@ -283,8 +279,7 @@ Eigen::Array<PetscInt, Eigen::Dynamic, 1> DofMap::dofs(const mesh::Mesh& mesh,
   for (auto& c : mesh::MeshRange(mesh, tdim))
   {
     // Get local-to-global dofmap for cell
-    Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> cell_dof_list
-        = cell_dofs(c.index());
+    auto cell_dof_list = cell_dofs(c.index());
 
     // Loop over all entities of dimension dim
     int local_index = 0;

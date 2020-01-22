@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <Eigen/Dense>
 #include <array>
 #include <dolfin/common/MPI.h>
 #include <dolfin/common/types.h>
@@ -32,16 +33,6 @@ class DistributedMeshTools
 public:
   /// Create global entity indices for entities of dimension d
   static void number_entities(const Mesh& mesh, int d);
-
-  /// Create global entity indices for entities of dimension d for given
-  /// global vertex indices
-  /// @param[in] mesh The mesh
-  /// @param[in] d The dimension
-  /// @return (global_entity_indices, shared_entities,
-  ///          number_of_global_entities)
-  static std::tuple<std::vector<std::int64_t>,
-                    std::map<std::int32_t, std::set<std::int32_t>>, std::size_t>
-  compute_entity_numbering(const Mesh& mesh, int d);
 
   /// Compute number of cells connected to each facet (globally). Facets
   /// on internal boundaries will be connected to two cells (with the

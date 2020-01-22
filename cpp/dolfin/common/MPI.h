@@ -54,7 +54,6 @@ public:
     MPI_Comm comm() const;
 
   private:
-
     // MPI communicator
     MPI_Comm _comm;
   };
@@ -213,7 +212,6 @@ public:
     throw std::runtime_error("MPI data type unknown");
     return MPI_CHAR;
   }
-
 };
 
 // Turn off doxygen for these template specialisations
@@ -263,6 +261,11 @@ template <>
 inline MPI_Datatype MPI::mpi_type<long long>()
 {
   return MPI_LONG_LONG;
+}
+template <>
+inline MPI_Datatype MPI::mpi_type<unsigned long long>()
+{
+  return MPI_UNSIGNED_LONG_LONG;
 }
 /// @endcond
 //---------------------------------------------------------------------------

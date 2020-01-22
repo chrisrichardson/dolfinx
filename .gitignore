@@ -120,7 +120,9 @@ install_manifest.txt
 cmake.local
 
 build/
+dist/
 
 .vscode
 *.egg-info
 .pytest_cache
+.*.swp

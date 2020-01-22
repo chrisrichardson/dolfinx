@@ -19,10 +19,6 @@ namespace
 {
 void test_distributed_mesh()
 {
-  int argc = 0;
-  char** argv = nullptr;
-  PetscInitialize(&argc, &argv, nullptr, nullptr);
-
   auto mpi_comm = dolfin::MPI::Comm(MPI_COMM_WORLD);
   int mpi_size = dolfin::MPI::size(mpi_comm.comm());
 
@@ -43,14 +39,9 @@ void test_distributed_mesh()
   io::XDMFFile file(MPI_COMM_WORLD, "mesh.xdmf");
   file.write(*mesh);
 
-  mesh::CellType cell_type;
-  EigenRowArrayXXd points;
-  EigenRowArrayXXi64 cells;
-  std::vector<std::int64_t> global_cell_indices;
-
   // Read in mesh in mesh data from XDMF file
   io::XDMFFile infile(MPI_COMM_WORLD, "mesh.xdmf");
-  std::tie(cell_type, points, cells, global_cell_indices)
+  auto [cell_type, points, cells, global_cell_indices]
       = infile.read_mesh_data(subset_comm);
 
   // Partition mesh into nparts using local mesh data and subset of
@@ -60,7 +51,7 @@ void test_distributed_mesh()
       subset_comm, nparts, cell_type, cells, mesh::Partitioner::scotch);
 
   // Build mesh from local mesh data, ghost mode, and provided cell partition
-  auto ghost_mode = mesh::GhostMode::none;
+  mesh::GhostMode ghost_mode = mesh::GhostMode::none;
   auto new_mesh
       = std::make_shared<mesh::Mesh>(mesh::Partitioning::build_from_partition(
           mpi_comm.comm(), cell_type, points, cells, global_cell_indices,
