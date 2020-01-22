@@ -16,11 +16,10 @@
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/la/PETScVector.h>
-#include <dolfin/mesh/Cell.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/MeshEntity.h>
 #include <dolfin/mesh/MeshFunction.h>
 #include <dolfin/mesh/MeshIterator.h>
-#include <dolfin/mesh/Vertex.h>
 #include <iomanip>
 #include <ostream>
 #include <sstream>
@@ -160,12 +159,14 @@ std::string init(const mesh::Mesh& mesh, const std::string filename,
                                       counter, filename, ".vtu");
   clear_file(vtu_filename);
 
-  // Number of cells and vertices
+  // Number of cells
   const std::size_t num_cells = mesh.topology().ghost_offset(cell_dim);
-  const std::size_t num_vertices = mesh.topology().ghost_offset(0);
+
+  // Number of points in mesh (can be more than the number of vertices)
+  const int num_nodes = mesh.geometry().points().rows();
 
   // Write headers
-  vtk_header_open(num_vertices, num_cells, vtu_filename);
+  vtk_header_open(num_nodes, num_cells, vtu_filename);
 
   return vtu_filename;
 }
@@ -186,7 +187,10 @@ void mesh_function_write(T& meshfunction, const std::string filename,
   // Open file to write data
   std::ofstream fp(vtu_filename.c_str(), std::ios_base::app);
   fp.precision(16);
-  fp << "<CellData  Scalars=\"" << meshfunction.name << "\">" << std::endl;
+  if (cell_dim == 0)
+    fp << "<PointData  Scalars=\"" << meshfunction.name << "\">" << std::endl;
+  else
+    fp << "<CellData  Scalars=\"" << meshfunction.name << "\">" << std::endl;
   fp << "<DataArray  type=\"Float64\"  Name=\"" << meshfunction.name
      << "\"  format=\"ascii\">";
 
@@ -195,7 +199,10 @@ void mesh_function_write(T& meshfunction, const std::string filename,
 
   // Write footers
   fp << "</DataArray>" << std::endl;
-  fp << "</CellData>" << std::endl;
+  if (cell_dim == 0)
+    fp << "</PointData>" << std::endl;
+  else
+    fp << "</CellData>" << std::endl;
 
   // Close file
   fp.close();
@@ -220,8 +227,8 @@ void mesh_function_write(T& meshfunction, const std::string filename,
 void write_function(const function::Function& u, const std::string filename,
                     const std::size_t counter, double time)
 {
-  assert(u.function_space()->mesh);
-  const mesh::Mesh& mesh = *u.function_space()->mesh;
+  assert(u.function_space()->mesh());
+  const mesh::Mesh& mesh = *u.function_space()->mesh();
 
   // Get MPI communicator
   const MPI_Comm mpi_comm = mesh.mpi_comm();
@@ -323,14 +330,14 @@ void results_write(const function::Function& u, std::string vtu_filename)
   }
 
   // Test for cell-based element type
-  assert(u.function_space()->mesh);
-  const mesh::Mesh& mesh = *u.function_space()->mesh;
+  assert(u.function_space()->mesh());
+  const mesh::Mesh& mesh = *u.function_space()->mesh();
   int cell_based_dim = 1;
   for (std::size_t i = 0; i < rank; i++)
     cell_based_dim *= mesh.topology().dim();
 
-  assert(u.function_space()->dofmap);
-  const fem::DofMap& dofmap = *u.function_space()->dofmap;
+  assert(u.function_space()->dofmap());
+  const fem::DofMap& dofmap = *u.function_space()->dofmap();
   assert(dofmap.element_dof_layout);
   if (dofmap.element_dof_layout->num_dofs() == cell_based_dim)
     VTKWriter::write_cell_data(u, vtu_filename);
@@ -351,7 +358,8 @@ void write_point_data(const function::Function& u, const mesh::Mesh& mesh,
   fp.precision(16);
 
   // Get function values at vertices
-  auto values = u.compute_point_values(mesh);
+  Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      values = u.compute_point_values();
 
   if (rank == 0)
   {
@@ -390,22 +398,24 @@ void write_point_data(const function::Function& u, const mesh::Mesh& mesh,
   std::ostringstream ss;
   ss << std::scientific;
   ss << std::setprecision(16);
-  for (auto& vertex : mesh::MeshRange<mesh::Vertex>(mesh))
+  const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& points
+      = mesh.geometry().points();
+  for (int i = 0; i < points.rows(); ++i)
   {
-    if (rank == 1 && dim == 2)
+    if (rank == 1 and dim == 2)
     {
       // Append 0.0 to 2D vectors to make them 3D
-      for (std::size_t i = 0; i < 2; i++)
-        ss << values(vertex.index(), i) << " ";
+      for (std::size_t j = 0; j < 2; j++)
+        ss << values(i, j) << " ";
       ss << 0.0 << "  ";
     }
-    else if (rank == 2 && dim == 4)
+    else if (rank == 2 and dim == 4)
     {
       // Pad 2D tensors with 0.0 to make them 3D
-      for (std::size_t i = 0; i < 2; i++)
+      for (std::size_t j = 0; j < 2; j++)
       {
-        ss << values(vertex.index(), (2 * i + 0)) << " ";
-        ss << values(vertex.index(), (2 * i + 1)) << " ";
+        ss << values(i, (2 * j + 0)) << " ";
+        ss << values(i, (2 * j + 1)) << " ";
         ss << 0.0 << " ";
       }
       ss << 0.0 << " ";
@@ -415,8 +425,8 @@ void write_point_data(const function::Function& u, const mesh::Mesh& mesh,
     else
     {
       // Write all components
-      for (std::size_t i = 0; i < dim; i++)
-        ss << values(vertex.index(), i) << " ";
+      for (std::size_t j = 0; j < dim; j++)
+        ss << values(i, j) << " ";
       ss << " ";
     }
   }
@@ -600,8 +610,8 @@ void pvtu_write_mesh(const std::string filename, const std::string fname,
 void pvtu_write(const function::Function& u, const std::string filename,
                 const std::string fname, const std::size_t counter)
 {
-  assert(u.function_space()->element);
-  const int rank = u.function_space()->element->value_rank();
+  assert(u.function_space()->element());
+  const int rank = u.function_space()->element()->value_rank();
   if (rank > 2)
   {
     throw std::runtime_error(
@@ -612,17 +622,17 @@ void pvtu_write(const function::Function& u, const std::string filename,
   const int dim = u.value_size();
 
   // Get mesh
-  assert(u.function_space()->mesh);
-  const mesh::Mesh& mesh = *(u.function_space()->mesh);
+  assert(u.function_space()->mesh());
+  const mesh::Mesh& mesh = *(u.function_space()->mesh());
 
   // Test for cell-based element type
   std::string data_type = "point";
   int cell_based_dim = 1;
-  assert(u.function_space()->dofmap);
+  assert(u.function_space()->dofmap());
   for (int i = 0; i < rank; i++)
     cell_based_dim *= mesh.topology().dim();
-  assert(u.function_space()->dofmap->element_dof_layout);
-  if (u.function_space()->dofmap->element_dof_layout->num_dofs()
+  assert(u.function_space()->dofmap()->element_dof_layout);
+  if (u.function_space()->dofmap()->element_dof_layout->num_dofs()
       == cell_based_dim)
   {
     data_type = "cell";

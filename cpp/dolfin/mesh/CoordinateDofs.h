@@ -23,16 +23,11 @@ class CoordinateDofs
 {
 public:
   /// Constructor
-  /// @param point_dofs
-  ///   Array containing point dofs for each entity
-  /// @param cell_permutation
-  ///   Array containing permutation for cell_vertices required for higher order
-  ///   elements which are input in gmsh/vtk order.
+  /// @param point_dofs Array containing point dofs for each entity
   CoordinateDofs(
       const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic,
-                                          Eigen::Dynamic, Eigen::RowMajor>>
-          point_dofs,
-      const std::vector<std::uint8_t>& cell_permutation);
+                                          Eigen::Dynamic, Eigen::RowMajor>>&
+      point_dofs);
 
   /// Copy constructor
   CoordinateDofs(const CoordinateDofs& topology) = default;
@@ -50,29 +45,16 @@ public:
   CoordinateDofs& operator=(CoordinateDofs&& topology) = default;
 
   /// Get the entity points associated with cells (const version)
-  ///
-  /// @return Connectivity
-  ///   Connections from cells to points
+  /// @return Connections from cells to points
   Connectivity& entity_points();
 
   /// Get the entity points associated with cells (const version)
-  ///
-  /// @return Connectivity
-  ///   Connections from cells to points
+  /// @return Connections from cells to points
   const Connectivity& entity_points() const;
-
-  const std::vector<std::uint8_t>& cell_permutation() const;
 
 private:
   // Connectivity from cells to points
   std::shared_ptr<Connectivity> _coord_dofs;
-
-
-  // FIXME: ideally remove this, but would need to harmonise the dof
-  // ordering between dolfin/ffc/gmsh
-  // Permutation required to transform to/from VTK/gmsh ordering to
-  // DOLFIN ordering needed for higher order elements
-  std::vector<std::uint8_t> _cell_permutation;
 };
 } // namespace mesh
 } // namespace dolfin

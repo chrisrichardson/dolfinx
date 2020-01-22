@@ -15,20 +15,21 @@ namespace dolfin
 {
 namespace fem
 {
-class CoordinateMapping;
+class CoordinateElement;
 }
 
 namespace mesh
 {
 
 /// Geometry stores the geometry imposed on a mesh.
-
+///
 /// Currently, the geometry is represented by the set of coordinates for
 /// the vertices of a mesh, but other representations are possible.
 
 class Geometry
 {
 public:
+  /// Constructor
   Geometry(std::int64_t num_points_global,
            const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic,
                               Eigen::RowMajor>& coordinates,
@@ -59,15 +60,11 @@ public:
   std::size_t num_points_global() const;
 
   /// Return coordinate array for point with local index n
-  Eigen::Ref<const Eigen::Vector3d>
-  x(std::size_t n) const;
+  Eigen::Ref<const Eigen::Vector3d> x(std::size_t n) const;
 
-  // Should this return an Eigen::Ref?
   /// Return array of coordinates for all points
-  Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>&
-  points();
+  Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& points();
 
-  // Should this return an Eigen::Ref?
   /// Return array of coordinates for all points (const version)
   const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>&
   points() const;
@@ -76,25 +73,22 @@ public:
   const std::vector<std::int64_t>& global_indices() const;
 
   /// Hash of coordinate values
-  ///
-  /// @returns std::size_t
-  ///    A tree-hashed value of the coordinates over all MPI processes
-  ///
+  /// @return A tree-hashed value of the coordinates over all MPI
+  ///         processes
   std::size_t hash() const;
 
   /// Return informal string representation (pretty-print)
   std::string str(bool verbose) const;
 
-  /// Put CoordinateMapping for now. Experimental.
-  std::shared_ptr<const fem::CoordinateMapping> coord_mapping;
+  /// Put CoordinateElement for now. Experimental.
+  std::shared_ptr<const fem::CoordinateElement> coord_mapping;
 
 private:
   // Coordinates for all points stored as a contiguous array
-  Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>
-      _coordinates;
+  Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor> _coordinates;
 
   // Geometric dimension
-  const int _dim;
+  int _dim;
 
   // Global indices for points
   std::vector<std::int64_t> _global_indices;

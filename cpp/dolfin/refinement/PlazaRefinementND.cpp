@@ -7,12 +7,10 @@
 #include "PlazaRefinementND.h"
 #include "ParallelRefinement.h"
 #include <dolfin/common/Timer.h>
-#include <dolfin/mesh/Cell.h>
-#include <dolfin/mesh/Edge.h>
-#include <dolfin/mesh/Face.h>
+#include <dolfin/mesh/Geometry.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/MeshEntity.h>
 #include <dolfin/mesh/MeshIterator.h>
-#include <dolfin/mesh/Vertex.h>
 #include <limits>
 #include <map>
 #include <vector>
@@ -38,13 +36,13 @@ void enforce_rules(ParallelRefinement& p_ref, const mesh::Mesh& mesh,
     update_count = 0;
     p_ref.update_logical_edgefunction();
 
-    for (const auto& f : mesh::MeshRange<mesh::Face>(mesh))
+    for (const auto& f : mesh::MeshRange(mesh, 2))
     {
       const std::int32_t long_e = long_edge[f.index()];
       if (p_ref.is_marked(long_e))
         continue;
       bool any_marked = false;
-      for (const auto& e : mesh::EntityRange<mesh::Edge>(f))
+      for (const auto& e : mesh::EntityRange(f, 1))
         any_marked |= p_ref.is_marked(e.index());
       if (any_marked)
       {
@@ -76,21 +74,23 @@ mesh::Mesh compute_refinement(const mesh::Mesh& mesh, ParallelRefinement& p_ref,
   std::vector<std::size_t> marked_edge_list;
   std::vector<std::int32_t> simplex_set;
 
-  for (const auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
+  const std::vector<std::int64_t>& global_indices
+      = mesh.topology().global_indices(0);
+  for (const auto& cell : mesh::MeshRange(mesh, tdim))
   {
     // Create vector of indices in the order [vertices][edges], 3+3 in
     // 2D, 4+6 in 3D
     std::int32_t j = 0;
-    for (const auto& v : mesh::EntityRange<mesh::Vertex>(cell))
-      indices[j++] = v.global_index();
+    for (const auto& v : mesh::EntityRange(cell, 0))
+      indices[j++] = global_indices[v.index()];
 
     marked_edge_list = p_ref.marked_edge_list(cell);
     if (marked_edge_list.size() == 0)
     {
       // Copy over existing Cell to new topology
       std::vector<std::int64_t> cell_topology;
-      for (const auto& v : mesh::EntityRange<mesh::Vertex>(cell))
-        cell_topology.push_back(v.global_index());
+      for (const auto& v : mesh::EntityRange(cell, 0))
+        cell_topology.push_back(global_indices[v.index()]);
       p_ref.new_cells(cell_topology);
       parent_cell.push_back(cell.index());
     }
@@ -111,14 +111,14 @@ mesh::Mesh compute_refinement(const mesh::Mesh& mesh, ParallelRefinement& p_ref,
 
       // Need longest edges of each facet in cell local indexing
       std::vector<std::int32_t> longest_edge;
-      for (const auto& f : mesh::EntityRange<mesh::Face>(cell))
+      for (const auto& f : mesh::EntityRange(cell, 2))
         longest_edge.push_back(long_edge[f.index()]);
 
       // Convert to cell local index
       for (auto& p : longest_edge)
       {
         int i = 0;
-        for (const auto& ej : mesh::EntityRange<mesh::Edge>(cell))
+        for (const auto& ej : mesh::EntityRange(cell, 1))
         {
           if (p == ej.index())
           {
@@ -315,12 +315,18 @@ face_long_edge(const mesh::Mesh& mesh)
     edge_ratio_ok.resize(mesh.num_entities(2));
 
   // Store all edge lengths in Mesh to save recalculating for each Face
+  const mesh::Geometry& geometry = mesh.geometry();
   std::vector<double> edge_length(mesh.num_entities(1));
-  for (const auto& e : mesh::MeshRange<mesh::Edge>(mesh))
-    edge_length[e.index()] = e.length();
+  for (const auto& e : mesh::MeshRange(mesh, 1))
+  {
+    const std::int32_t* v = e.entities(0);
+    edge_length[e.index()] = (geometry.x(v[0]) - geometry.x(v[1])).norm();
+  }
 
   // Get longest edge of each face
-  for (const auto& f : mesh::MeshRange<mesh::Face>(mesh))
+  const std::vector<std::int64_t>& global_indices
+      = mesh.topology().global_indices(0);
+  for (const auto& f : mesh::MeshRange(mesh, 2))
   {
     const std::int32_t* face_edges = f.entities(1);
 
@@ -328,7 +334,7 @@ face_long_edge(const mesh::Mesh& mesh)
     double max_len = 0.0;
     double min_len = std::numeric_limits<double>::max();
 
-    for (unsigned int i = 0; i < 3; ++i)
+    for (int i = 0; i < 3; ++i)
     {
       const double e_len = edge_length[face_edges[i]];
 
@@ -344,9 +350,9 @@ face_long_edge(const mesh::Mesh& mesh)
         // If edges are the same length, compare global index of
         // opposite vertex.  Only important so that tetrahedral faces
         // have a matching refinement pattern across processes.
-        const mesh::Vertex vmax(mesh, f.entities(0)[imax]);
-        const mesh::Vertex vi(mesh, f.entities(0)[i]);
-        if (vi.global_index() > vmax.global_index())
+        const mesh::MeshEntity vmax(mesh, 0, f.entities(0)[imax]);
+        const mesh::MeshEntity vi(mesh, 0, f.entities(0)[i]);
+        if (global_indices[vi.index()] > global_indices[vmax.index()])
           imax = i;
       }
     }
@@ -358,7 +364,7 @@ face_long_edge(const mesh::Mesh& mesh)
     long_edge[f.index()] = face_edges[imax];
   }
 
-  return std::make_pair(std::move(long_edge), std::move(edge_ratio_ok));
+  return std::pair(std::move(long_edge), std::move(edge_ratio_ok));
 }
 //-----------------------------------------------------------------------------
 
@@ -366,16 +372,14 @@ face_long_edge(const mesh::Mesh& mesh)
 //-----------------------------------------------------------------------------
 mesh::Mesh PlazaRefinementND::refine(const mesh::Mesh& mesh, bool redistribute)
 {
-  if (mesh.type().type != mesh::CellType::Type::triangle
-      and mesh.type().type != mesh::CellType::Type::tetrahedron)
+  if (mesh.cell_type() != mesh::CellType::triangle
+      and mesh.cell_type() != mesh::CellType::tetrahedron)
   {
     throw std::runtime_error("Cell type not supported");
   }
 
   common::Timer t0("PLAZA: refine");
-  std::vector<std::int32_t> long_edge;
-  std::vector<bool> edge_ratio_ok;
-  std::tie(long_edge, edge_ratio_ok) = face_long_edge(mesh);
+  auto [long_edge, edge_ratio_ok] = face_long_edge(mesh);
 
   ParallelRefinement p_ref(mesh);
   p_ref.mark_all();
@@ -389,16 +393,14 @@ PlazaRefinementND::refine(const mesh::Mesh& mesh,
                           const mesh::MeshFunction<int>& refinement_marker,
                           bool redistribute)
 {
-  if (mesh.type().type != mesh::CellType::Type::triangle
-      and mesh.type().type != mesh::CellType::Type::tetrahedron)
+  if (mesh.cell_type() != mesh::CellType::triangle
+      and mesh.cell_type() != mesh::CellType::tetrahedron)
   {
     throw std::runtime_error("Cell type not supported");
   }
 
   common::Timer t0("PLAZA: refine");
-  std::vector<std::int32_t> long_edge;
-  std::vector<bool> edge_ratio_ok;
-  std::tie(long_edge, edge_ratio_ok) = face_long_edge(mesh);
+  auto [long_edge, edge_ratio_ok] = face_long_edge(mesh);
 
   ParallelRefinement p_ref(mesh);
   p_ref.mark(refinement_marker);

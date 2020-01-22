@@ -4,13 +4,21 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include "casters.h"
+#include "caster_mpi.h"
+#include "caster_petsc.h"
 #include <dolfin/nls/NewtonSolver.h>
 #include <dolfin/nls/NonlinearProblem.h>
 #include <memory>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+
+#ifdef DEBUG
+// Needed for typeid(_p_Mat) in debug mode
+#include <petsc/private/matimpl.h>
+// Needed for typeid(_p_Vec) in debug mode
+#include <petsc/private/vecimpl.h>
+#endif
 
 namespace py = pybind11;
 
@@ -36,6 +44,16 @@ void nls(py::module& m)
                             &nonlinear_problem, iteration);
       return dolfin::nls::NewtonSolver::converged(r, nonlinear_problem,
                                                   iteration);
+    }
+
+    void update_solution(Vec x, const Vec dx, double relaxation,
+                         const dolfin::nls::NonlinearProblem& nonlinear_problem,
+                         std::size_t iteration)
+    {
+      PYBIND11_OVERLOAD_INT(void, dolfin::nls::NewtonSolver, "update_solution",
+                            x, &dx, relaxation, &nonlinear_problem, iteration);
+      return dolfin::nls::NewtonSolver::update_solution(
+          x, dx, relaxation, nonlinear_problem, iteration);
     }
   };
 

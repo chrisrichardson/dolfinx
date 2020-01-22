@@ -11,8 +11,8 @@
 #include <dolfin/fem/DofMap.h>
 #include <dolfin/la/PETScVector.h>
 #include <dolfin/la/utils.h>
-#include <dolfin/mesh/Cell.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/MeshEntity.h>
 #include <dolfin/mesh/MeshIterator.h>
 #include <iostream>
 #include <petscvec.h>
@@ -46,7 +46,7 @@ HDF5Utility::map_gdof_to_cell(const MPI_Comm mpi_comm,
     {
       const unsigned char local_dof_i = j - x_cell_dofs[i];
       const PetscInt global_dof = input_cell_dofs[j - offset];
-      dof_to_cell[global_dof] = std::make_pair(input_cells[i], local_dof_i);
+      dof_to_cell[global_dof] = std::pair(input_cells[i], local_dof_i);
     }
   }
 
@@ -89,7 +89,7 @@ HDF5Utility::map_gdof_to_cell(const MPI_Comm mpi_comm,
     }
   }
 
-  return std::make_pair(std::move(global_cells), std::move(remote_local_dofi));
+  return std::pair(std::move(global_cells), std::move(remote_local_dofi));
 }
 //-----------------------------------------------------------------------------
 std::vector<PetscInt> HDF5Utility::get_global_dof(
@@ -230,8 +230,8 @@ void HDF5Utility::cell_owners_in_range(
   // MPI communicator
   const MPI_Comm mpi_comm = mesh.mpi_comm();
 
-  const std::size_t n_global_cells
-      = mesh.num_entities_global(mesh.topology().dim());
+  const int tdim = mesh.topology().dim();
+  const std::size_t n_global_cells = mesh.num_entities_global(tdim);
   const std::size_t num_processes = MPI::size(mpi_comm);
 
   // Communicate global ownership of cells to matching process
@@ -239,10 +239,12 @@ void HDF5Utility::cell_owners_in_range(
       = MPI::local_range(mpi_comm, n_global_cells);
   global_owner.resize(range[1] - range[0]);
 
+  const std::vector<std::int64_t>& global_indices
+      = mesh.topology().global_indices(tdim);
   std::vector<std::vector<std::size_t>> send_owned_global(num_processes);
-  for (auto& mesh_cell : mesh::MeshRange<mesh::Cell>(mesh))
+  for (auto& mesh_cell : mesh::MeshRange(mesh, tdim))
   {
-    const std::size_t global_i = mesh_cell.global_index();
+    const std::size_t global_i = global_indices[mesh_cell.index()];
     const std::size_t local_i = mesh_cell.index();
     const std::size_t po_proc
         = MPI::index_owner(mpi_comm, global_i, n_global_cells);
@@ -287,9 +289,7 @@ void HDF5Utility::set_local_vector_values(
 
   // Calculate one (global cell, local_dof_index) to associate with
   // each item in the vector on this process
-  std::vector<std::size_t> global_cells;
-  std::vector<std::size_t> remote_local_dofi;
-  std::tie(global_cells, remote_local_dofi) = HDF5Utility::map_gdof_to_cell(
+  auto [global_cells, remote_local_dofi] = HDF5Utility::map_gdof_to_cell(
       mpi_comm, cells, cell_dofs, x_cell_dofs, input_vector_range);
 
   // At this point, each process has a set of data, and for each

@@ -50,7 +50,7 @@ public:
   /// counter of the Vec object will be increased. The Vec reference
   /// count will always be decreased upon destruction of the the
   /// PETScVector.
-  explicit PETScVector(Vec x, bool inc_ref_count = true);
+  explicit PETScVector(Vec x, bool inc_ref_count);
 
   /// Destructor
   virtual ~PETScVector();
@@ -61,7 +61,7 @@ public:
   /// Move Assignment operator
   PETScVector& operator=(PETScVector&& x);
 
-  // Copy vector
+  /// Copy vector
   PETScVector copy() const;
 
   /// Return global size of vector

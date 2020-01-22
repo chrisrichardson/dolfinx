@@ -9,8 +9,8 @@
 #include <array>
 #include <cstddef>
 #include <dolfin/common/MPI.h>
-#include <dolfin/mesh/CellType.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/Partitioning.h>
 
 namespace dolfin
 {
@@ -26,32 +26,23 @@ namespace generation
 class BoxMesh
 {
 public:
-  /// Create a uniform finite element _Mesh_ over the rectangular
-  /// prism spanned by the two _geometry::Point_s p0 and p1. The order of the
+  /// Create a uniform finite element _Mesh_ over the rectangular prism
+  /// spanned by the two _geometry::Point_s p0 and p1. The order of the
   /// two points is not important in terms of minimum and maximum
   /// coordinates.
   ///
-  /// @param comm (MPI_Comm)
-  ///         MPI communicator
-  /// @param p (std::array<_geometry::Point_, 2>)
-  ///         geometry::Points of box.
-  /// @param n (std::array<double, 3> )
-  ///         Number of cells in each direction.
-  /// @param cell_type
-  ///         Tetrahedron or hexahedron
-  ///
-  /// @code{.cpp}
-  ///         // Mesh with 8 cells in each direction on the
-  ///         // set [-1,2] x [-1,2] x [-1,2].
-  ///         geometry::Point p0(-1, -1, -1);
-  ///         geometry::Point p1(2, 2, 2);
-  ///         auto mesh = BoxMesh::create({p0, p1}, {8, 8, 8});
-  /// @endcode
-  static mesh::Mesh create(MPI_Comm comm,
-                           const std::array<Eigen::Vector3d, 2>& p,
-                           std::array<std::size_t, 3> n,
-                           mesh::CellType::Type cell_type,
-                           const mesh::GhostMode ghost_mode);
+  /// @param[in] comm MPI communicator to build mesh on
+  /// @param[in] p Points of box
+  /// @param[in] n Number of cells in each direction.
+  /// @param[in] cell_type Tetrahedron or hexahedron
+  /// @param[in] ghost_mode Ghost mode
+  /// @param[in] partitioner Partitioner (scotch, parmetis or kahip)
+  /// @return Mesh
+  static mesh::Mesh
+  create(MPI_Comm comm, const std::array<Eigen::Vector3d, 2>& p,
+         std::array<std::size_t, 3> n, mesh::CellType cell_type,
+         const mesh::GhostMode ghost_mode,
+         mesh::Partitioner partitioner = mesh::Partitioner::scotch);
 };
 } // namespace generation
 } // namespace dolfin

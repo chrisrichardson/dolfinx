@@ -5,6 +5,7 @@
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #include "VTKWriter.h"
+#include "cells.h"
 #include <boost/detail/endian.hpp>
 #include <cstdint>
 #include <dolfin/fem/DofMap.h>
@@ -13,11 +14,12 @@
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/la/PETScVector.h>
 #include <dolfin/la/utils.h>
-#include <dolfin/mesh/Cell.h>
+#include <dolfin/mesh/Connectivity.h>
+#include <dolfin/mesh/CoordinateDofs.h>
 #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/MeshEntity.h>
 #include <dolfin/mesh/MeshFunction.h>
 #include <dolfin/mesh/MeshIterator.h>
-#include <dolfin/mesh/Vertex.h>
 #include <fstream>
 #include <iomanip>
 #include <ostream>
@@ -31,31 +33,60 @@ namespace
 {
 //-----------------------------------------------------------------------------
 // Get VTK cell type
-std::uint8_t vtk_cell_type(const mesh::Mesh& mesh, std::size_t cell_dim)
+std::int8_t get_vtk_cell_type(const mesh::Mesh& mesh, std::size_t cell_dim,
+                              std::size_t cell_order)
 {
   // Get cell type
-  mesh::CellType::Type cell_type = mesh.type().entity_type(cell_dim);
+  mesh::CellType cell_type = mesh::cell_entity_type(mesh.cell_type(), cell_dim);
 
   // Determine VTK cell type
-  std::uint8_t vtk_cell_type = 0;
-  if (cell_type == mesh::CellType::Type::tetrahedron)
-    vtk_cell_type = 10;
-  else if (cell_type == mesh::CellType::Type::hexahedron)
-    vtk_cell_type = 12;
-  else if (cell_type == mesh::CellType::Type::quadrilateral)
-    vtk_cell_type = 9;
-  else if (cell_type == mesh::CellType::Type::triangle)
-    vtk_cell_type = 5;
-  else if (cell_type == mesh::CellType::Type::interval)
-    vtk_cell_type = 3;
-  else if (cell_type == mesh::CellType::Type::point)
-    vtk_cell_type = 1;
-  else
+  switch (cell_type)
   {
-    throw std::runtime_error("Unknown cell type");
-  }
+  case mesh::CellType::tetrahedron:
+    switch (cell_order)
+    {
+    case 1:
+      return 10;
+    default:
+      return 71;
+    }
 
-  return vtk_cell_type;
+  case mesh::CellType::hexahedron:
+    switch (cell_order)
+    {
+    case 1:
+      return 12;
+    default:
+      return 72;
+    }
+  case mesh::CellType::quadrilateral:
+  {
+    switch (cell_order)
+    {
+    case 1:
+      return 9;
+    default:
+      return 70;
+    }
+  }
+  case mesh::CellType::triangle:
+  {
+    switch (cell_order)
+    {
+    case 1:
+      return 5;
+    default:
+      return 69;
+    }
+  }
+  case mesh::CellType::interval:
+    return 3;
+  case mesh::CellType::point:
+    return 1;
+  default:
+    throw std::runtime_error("Unknown cell type");
+    return 0;
+  }
 }
 //----------------------------------------------------------------------------
 // Write cell data (ascii)
@@ -103,14 +134,16 @@ std::string ascii_cell_data(const mesh::Mesh& mesh,
 }
 //----------------------------------------------------------------------------
 // mesh::Mesh writer (ascii)
-void write_ascii_mesh(const mesh::Mesh& mesh, std::size_t cell_dim,
+void write_ascii_mesh(const mesh::Mesh& mesh, int cell_dim,
                       std::string filename)
 {
-  const std::size_t num_cells = mesh.topology().ghost_offset(cell_dim);
-  const std::size_t num_cell_vertices = mesh.type().num_vertices(cell_dim);
+  // FIXME: 'mesh.topology().ghost_offset' is plain confusing
+  const int num_cells = mesh.topology().ghost_offset(cell_dim);
+  const int element_degree = mesh.degree();
 
   // Get VTK cell type
-  const std::size_t _vtk_cell_type = vtk_cell_type(mesh, cell_dim);
+  const std::int8_t vtk_cell_type
+      = get_vtk_cell_type(mesh, cell_dim, element_degree);
 
   // Open file
   std::ofstream file(filename.c_str(), std::ios::app);
@@ -125,11 +158,10 @@ void write_ascii_mesh(const mesh::Mesh& mesh, std::size_t cell_dim,
   file << "<DataArray  type=\"Float64\"  NumberOfComponents=\"3\"  format=\""
        << "ascii"
        << "\">";
-  for (auto& v : mesh::MeshRange<mesh::Vertex>(mesh))
-  {
-    Eigen::Vector3d p = v.x();
-    file << p[0] << " " << p[1] << " " << p[2] << "  ";
-  }
+  const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor> points
+      = mesh.geometry().points();
+  for (int i = 0; i < points.rows(); ++i)
+    file << points(i, 0) << " " << points(i, 1) << " " << points(i, 2) << "  ";
   file << "</DataArray>" << std::endl << "</Points>" << std::endl;
 
   // Write cell connectivity
@@ -138,37 +170,89 @@ void write_ascii_mesh(const mesh::Mesh& mesh, std::size_t cell_dim,
        << "ascii"
        << "\">";
 
-  std::unique_ptr<mesh::CellType> celltype(
-      mesh::CellType::create(mesh.type().entity_type(cell_dim)));
-  const std::vector<std::int8_t> perm = celltype->vtk_mapping();
-  for (auto& c : mesh::MeshRange<mesh::MeshEntity>(mesh, cell_dim))
+  int num_nodes;
+  const int tdim = mesh.topology().dim();
+  if (cell_dim == 0)
   {
-    for (unsigned int i = 0; i != c.num_entities(0); ++i)
-      file << c.entities(0)[perm[i]] << " ";
-    file << " ";
+    // Special case when only points should be visualized
+    for (int i = 0; i < points.rows(); ++i)
+      file << i << " ";
+    file << "</DataArray>" << std::endl;
+    num_nodes = 1;
   }
-  file << "</DataArray>" << std::endl;
+  else if (cell_dim == tdim)
+  {
+    // Special case where the cells are visualized (Supports higher order
+    // elements)
+    const mesh::Connectivity& connectivity_g
+        = mesh.coordinate_dofs().entity_points();
+    const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& cell_connections
+        = connectivity_g.connections();
+    const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& pos_g
+        = connectivity_g.entity_positions();
+    num_nodes = connectivity_g.size(0);
+
+    const std::vector<std::uint8_t> perm
+        = io::cells::dolfin_to_vtk(mesh.cell_type(), num_nodes);
+    for (int j = 0; j < mesh.num_entities(mesh.topology().dim()); ++j)
+    {
+      for (int i = 0; i < num_nodes; ++i)
+        file << cell_connections(pos_g(j) + perm[i]) << " ";
+      file << " ";
+    }
+    file << "</DataArray>" << std::endl;
+  }
+  else
+  {
+    const int degree = mesh.degree();
+    if (degree > 1)
+    {
+      throw std::runtime_error("MeshFunction of lower degree than the "
+                               "topological dimension is not implemented");
+    }
+    mesh::CellType e_type = mesh::cell_entity_type(mesh.cell_type(), cell_dim);
+    // FIXME : Need to implement permutations for higher order
+    // geometries (aka line segments). CoordinateDofs needs to be
+    // extended to have connections to facets.
+    const int num_vertices = mesh::num_cell_vertices(e_type);
+    const std::vector<std::uint8_t> perm
+        = io::cells::dolfin_to_vtk(e_type, num_vertices);
+    auto vertex_connectivity = mesh.topology().connectivity(cell_dim, 0);
+    const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& vertex_connections
+        = vertex_connectivity->connections();
+    const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& pos_vertex
+        = vertex_connectivity->entity_positions();
+    for (int j = 0; j < mesh.num_entities(cell_dim); ++j)
+    {
+      for (int i = 0; i < num_vertices; ++i)
+        file << vertex_connections(pos_vertex(j) + perm[i]) << " ";
+      file << " ";
+    }
+    file << "</DataArray>" << std::endl;
+    // Change number of nodes to fix offset
+    num_nodes = num_vertices;
+  }
 
   // Write offset into connectivity array for the end of each cell
   file << "<DataArray  type=\"UInt32\"  Name=\"offsets\"  format=\""
        << "ascii"
        << "\">";
-  for (std::size_t offsets = 1; offsets <= num_cells; offsets++)
-    file << offsets * num_cell_vertices << " ";
+  for (int offsets = 1; offsets <= num_cells; offsets++)
+    file << offsets * num_nodes << " ";
   file << "</DataArray>" << std::endl;
 
   // Write cell type
   file << "<DataArray  type=\"UInt8\"  Name=\"types\"  format=\""
        << "ascii"
        << "\">";
-  for (std::size_t types = 0; types < num_cells; types++)
-    file << _vtk_cell_type << " ";
+  for (int types = 0; types < num_cells; types++)
+    file << std::to_string(vtk_cell_type) << " ";
   file << "</DataArray>" << std::endl;
   file << "</Cells>" << std::endl;
 
   // Close file
   file.close();
-}
+} // namespace
 //-----------------------------------------------------------------------------
 
 } // namespace
@@ -184,10 +268,10 @@ void VTKWriter::write_cell_data(const function::Function& u,
                                 std::string filename)
 {
   // For brevity
-  assert(u.function_space()->mesh);
-  assert(u.function_space()->dofmap);
-  const mesh::Mesh& mesh = *u.function_space()->mesh;
-  const fem::DofMap& dofmap = *u.function_space()->dofmap;
+  assert(u.function_space()->mesh());
+  assert(u.function_space()->dofmap());
+  const mesh::Mesh& mesh = *u.function_space()->mesh();
+  const fem::DofMap& dofmap = *u.function_space()->dofmap();
   const std::size_t tdim = mesh.topology().dim();
   const std::size_t num_cells = mesh.topology().ghost_offset(tdim);
 
@@ -257,7 +341,7 @@ void VTKWriter::write_cell_data(const function::Function& u,
   std::vector<std::size_t>::iterator cell_offset = offset.begin();
   assert(dofmap.element_dof_layout);
   const int num_dofs_cell = dofmap.element_dof_layout->num_dofs();
-  for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
+  for (auto& cell : mesh::MeshRange(mesh, tdim))
   {
     // Tabulate dofs
     auto dofs = dofmap.cell_dofs(cell.index());

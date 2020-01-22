@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright (C) 2017-2018 Chris N. Richardson, Garth N. Wells and Michal Habera
 #
 # This file is part of DOLFIN (https://www.fenicsproject.org)
@@ -6,7 +5,12 @@
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 """IO module for input data, post-processing and checkpointing"""
 
+import typing
+
+import numpy
+
 from dolfin import cpp, fem, function
+
 
 __all__ = ["HDF5File", "XDMFFile"]
 
@@ -112,11 +116,42 @@ class HDF5File:
 
         V_cpp = getattr(V, "_cpp_object", V)
         u_cpp = self._cpp_object.read(V_cpp, name)
-        return function.Function(V, u_cpp.vector())
+        return function.Function(V, u_cpp.vector)
+
+
+class VTKFile:
+    """Interface to VTK files
+    VTK supports arbitrary order Lagrangian finite elements for the
+    geometry description. XDMF is the preferred format for geometry
+    order <= 2.
+
+    """
+
+    def __init__(self, filename: str):
+        """Open VTK file
+        Parameters
+        ----------
+        filename
+            Name of the file
+        """
+        self._cpp_object = cpp.io.VTKFile(filename)
+
+    def write(self, o, t=None) -> None:
+        """Write object to file"""
+        o_cpp = getattr(o, "_cpp_object", o)
+        if t is None:
+            self._cpp_object.write(o_cpp)
+        else:
+            self._cpp_object.write(o_cpp, t)
 
 
 class XDMFFile:
-    """Interface to XDMF files"""
+    """Interface to XDMF files
+    This format is preferred on lower order geometries and for
+    DG and RT function spaces.
+    XDMF also allows for checkpointing of solutions and has parallel support.
+
+    """
 
     # Import encoding (find better way?)
     Encoding = cpp.io.XDMFFile.Encoding
@@ -206,6 +241,27 @@ class XDMFFile:
         mesh.geometry.coord_mapping = fem.create_coordinate_map(mesh)
         return mesh
 
+    def read_mesh_data(self, mpi_comm) -> typing.Tuple[cpp.mesh.CellType, numpy.ndarray,
+                                                       numpy.ndarray, typing.List[int]]:
+        """Read in mesh data
+
+        Parameters
+        ----------
+        mpi_comm:
+            MPI communicator
+        Returns
+        -------
+        cell_type
+            Cell type
+        points
+            Geometric points on each process
+        cells
+            Topological cells with global vertex indexing
+        global_cell_indices
+            List of global cell indices
+        """
+        return self._cpp_object.read_mesh_data(mpi_comm)
+
     def read_checkpoint(self, V, name: str,
                         counter: int = -1) -> function.Function:
         """Read finite element Function from checkpointing format
@@ -233,7 +289,7 @@ class XDMFFile:
 
         V_cpp = getattr(V, "_cpp_object", V)
         u_cpp = self._cpp_object.read_checkpoint(V_cpp, name, counter)
-        return function.Function(V, u_cpp.vector())
+        return function.Function(V, u_cpp.vector)
 
     def write_checkpoint(self, u, name: str, time_step: float = 0.0) -> None:
         """Write finite element Function in checkpointing format

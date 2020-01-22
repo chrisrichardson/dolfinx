@@ -118,7 +118,7 @@ dolfin::nls::NewtonSolver::solve(NonlinearProblem& nonlinear_problem, Vec x)
 
   if (newton_converged)
   {
-    if (_mpi_comm.rank() == 0)
+    if (MPI::rank(_mpi_comm.comm()) == 0)
     {
       LOG(INFO) << "Newton solver finished in " << newton_iteration
                 << " iterations and " << _krylov_iterations
@@ -141,7 +141,7 @@ dolfin::nls::NewtonSolver::solve(NonlinearProblem& nonlinear_problem, Vec x)
       LOG(WARNING) << "Newton solver did not converge.";
   }
 
-  return std::make_pair(newton_iteration, newton_converged);
+  return std::pair(newton_iteration, newton_converged);
 }
 //-----------------------------------------------------------------------------
 int nls::NewtonSolver::krylov_iterations() const { return _krylov_iterations; }
@@ -154,7 +154,7 @@ bool nls::NewtonSolver::converged(const Vec r,
                                   const NonlinearProblem& nonlinear_problem,
                                   std::size_t newton_iteration)
 {
-  la::PETScVector _r(r);
+  la::PETScVector _r(r, true);
   _residual = _r.norm(la::Norm::l2);
 
   // If this is the first iteration step, set initial residual
@@ -165,7 +165,7 @@ bool nls::NewtonSolver::converged(const Vec r,
   const double relative_residual = _residual / _residual0;
 
   // Output iteration number and residual
-  if (report && _mpi_comm.rank() == 0)
+  if (report && MPI::rank(_mpi_comm.comm()) == 0)
   {
     LOG(INFO) << "Newton iteration " << newton_iteration
               << ": r (abs) = " << _residual << " (tol = " << atol
@@ -182,7 +182,7 @@ bool nls::NewtonSolver::converged(const Vec r,
 //-----------------------------------------------------------------------------
 void nls::NewtonSolver::update_solution(
     Vec x, const Vec dx, double relaxation,
-    const NonlinearProblem& nonlinear_problem, std::size_t interation)
+    const NonlinearProblem& nonlinear_problem, std::size_t iteration)
 {
   VecAXPY(x, -relaxation, dx);
 }

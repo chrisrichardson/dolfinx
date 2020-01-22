@@ -9,13 +9,13 @@ import os
 import numpy
 from petsc4py import PETSc
 
-from dolfin import (MPI, Cell, Function, FunctionSpace, MeshEntities,
-                    MeshEntity, MeshFunction, MeshValueCollection,
-                    UnitCubeMesh, UnitSquareMesh, cpp)
+from dolfin import (MPI, Function, FunctionSpace, MeshEntity, MeshFunction,
+                    MeshValueCollection, UnitCubeMesh, UnitSquareMesh, cpp)
 from dolfin.io import HDF5File
 from dolfin_utils.test.fixtures import tempdir
 from dolfin_utils.test.skips import xfail_if_complex
 
+import pytest
 assert (tempdir)
 
 
@@ -53,15 +53,13 @@ def test_save_and_read_meshfunction_2D(tempdir):
     # Write to file
     mesh = UnitSquareMesh(MPI.comm_world, 20, 20)
     with HDF5File(mesh.mpi_comm(), filename, "w") as mf_file:
-
         # save meshfuns to compare when reading back
         meshfunctions = []
         for i in range(0, 3):
             mf = MeshFunction('double', mesh, i, 0.0)
-            # NB choose a value to set which will be the same
-            # on every process for each entity
-            for cell in MeshEntities(mesh, i):
-                mf.values[cell.index()] = cell.midpoint()[0]
+            # NB choose a value to set which will be the same on every
+            # process for each entity
+            mf.values[:] = cpp.mesh.midpoints(mesh, i, range(mesh.num_entities(i)))[:, 0]
             meshfunctions.append(mf)
             mf_file.write(mf, "/meshfunction/meshfun%d" % i)
 
@@ -83,10 +81,11 @@ def test_save_and_read_meshfunction_3D(tempdir):
     meshfunctions = []
     for i in range(0, 4):
         mf = MeshFunction('double', mesh, i, 0.0)
-        # NB choose a value to set which will be the same
-        # on every process for each entity
-        for cell in MeshEntities(mesh, i):
-            mf.values[cell.index()] = cell.midpoint()[0]
+        mp = cpp.mesh.midpoints(mesh, i, range(mesh.num_entities(i)))
+
+        # NB choose a value to set which will be the same on every
+        # process for each entity
+        mf.values[:] = mp[:, 0]
         meshfunctions.append(mf)
         mf_file.write(mf, "/meshfunction/group/%d/meshfun" % i)
     mf_file.close()
@@ -106,30 +105,28 @@ def test_save_and_read_mesh_value_collection(tempdir):
     filename = os.path.join(tempdir, "mesh_value_collection.h5")
     mesh = UnitCubeMesh(MPI.comm_world, ndiv, ndiv, ndiv)
 
-    def point2list(p):
-        return [p[0], p[1], p[2]]
-
     # write to file
     with HDF5File(mesh.mpi_comm(), filename, 'w') as f:
         for dim in range(mesh.topology.dim):
             mvc = MeshValueCollection("size_t", mesh, dim)
             mesh.create_entities(dim)
-            for e in MeshEntities(mesh, dim):
+            mp = cpp.mesh.midpoints(mesh, dim, range(mesh.num_entities(dim)))
+            for e in range(mesh.num_entities(dim)):
                 # this can be easily computed to the check the value
-                val = int(ndiv * sum(point2list(e.midpoint()))) + 1
-                mvc.set_value(e.index(), val)
+                val = int(ndiv * mp[e].sum()) + 1
+                mvc.set_value(e, val)
             f.write(mvc, "/mesh_value_collection_{}".format(dim))
 
     # read from file
     with HDF5File(mesh.mpi_comm(), filename, 'r') as f:
         for dim in range(mesh.topology.dim):
-            mvc = f.read_mvc_size_t(mesh,
-                                    "/mesh_value_collection_{}".format(dim))
+            mvc = f.read_mvc_size_t(mesh, "/mesh_value_collection_{}".format(dim))
+            mp = cpp.mesh.midpoints(mesh, dim, range(mesh.num_entities(dim)))
             # check the values
             for (cell, lidx), val in mvc.values().items():
-                eidx = Cell(mesh, cell).entities(dim)[lidx]
-                mid = point2list(MeshEntity(mesh, dim, eidx).midpoint())
-                assert val == int(ndiv * sum(mid)) + 1
+                eidx = MeshEntity(mesh, mesh.topology.dim, cell).entities(dim)[lidx]
+                mid = mp[eidx]
+                assert val == int(ndiv * mid.sum()) + 1
 
 
 def test_save_and_read_mesh_value_collection_with_only_one_marked_entity(
@@ -163,8 +160,8 @@ def test_save_and_read_function(tempdir):
     F0 = Function(Q)
     F1 = Function(Q)
 
-    def E(values, x):
-        values[:, 0] = x[:, 0]
+    def E(x):
+        return x[0]
 
     F0.interpolate(E)
 
@@ -177,16 +174,18 @@ def test_save_and_read_function(tempdir):
     # Read back from file
     hdf5_file = HDF5File(mesh.mpi_comm(), filename, "r")
     F1 = hdf5_file.read_function(Q, "/function")
-    F0.vector().axpy(-1.0, F1.vector())
-    assert F0.vector().norm() < 1.0e-12
+    F0.vector.axpy(-1.0, F1.vector)
+    assert F0.vector.norm() < 1.0e-12
     hdf5_file.close()
 
 
-def test_save_and_read_mesh_2D(tempdir):
+@pytest.mark.parametrize("mesh0", [UnitSquareMesh(MPI.comm_world, 20, 20),
+                                   cpp.generation.UnitDiscMesh.create(MPI.comm_world, 3,
+                                                                      cpp.mesh.GhostMode.none)])
+def test_save_and_read_mesh_2D(mesh0, tempdir):
     filename = os.path.join(tempdir, "mesh2d.h5")
 
     # Write to file
-    mesh0 = UnitSquareMesh(MPI.comm_world, 20, 20)
     mesh_file = HDF5File(mesh0.mpi_comm(), filename, "w")
     mesh_file.write(mesh0, "/my_mesh")
     mesh_file.close()
@@ -197,6 +196,15 @@ def test_save_and_read_mesh_2D(tempdir):
     mesh_file.close()
 
     assert mesh0.num_entities_global(0) == mesh1.num_entities_global(0)
+    dim = mesh0.topology.dim
+    assert mesh0.num_entities_global(dim) == mesh1.num_entities_global(dim)
+
+    # Read from file, and use partition from file
+    mesh_file = HDF5File(mesh0.mpi_comm(), filename, "r")
+    mesh2 = mesh_file.read_mesh("/my_mesh", True, cpp.mesh.GhostMode.none)
+    mesh_file.close()
+
+    assert mesh0.num_cells() == mesh2.num_cells()
     dim = mesh0.topology.dim
     assert mesh0.num_entities_global(dim) == mesh1.num_entities_global(dim)
 
@@ -216,6 +224,15 @@ def test_save_and_read_mesh_3D(tempdir):
     mesh_file.close()
 
     assert mesh0.num_entities_global(0) == mesh1.num_entities_global(0)
+    dim = mesh0.topology.dim
+    assert mesh0.num_entities_global(dim) == mesh1.num_entities_global(dim)
+
+    # Read from file, and use partition from file
+    mesh_file = HDF5File(mesh0.mpi_comm(), filename, "r")
+    mesh2 = mesh_file.read_mesh("/my_mesh", True, cpp.mesh.GhostMode.none)
+    mesh_file.close()
+
+    assert mesh0.num_cells() == mesh2.num_cells()
     dim = mesh0.topology.dim
     assert mesh0.num_entities_global(dim) == mesh1.num_entities_global(dim)
 

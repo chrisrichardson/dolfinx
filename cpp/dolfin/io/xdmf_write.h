@@ -35,6 +35,7 @@ class Mesh;
 
 namespace io
 {
+/// Low-level methods for generating XDMF files
 namespace xdmf_write
 {
 
@@ -46,7 +47,8 @@ std::set<std::uint32_t> compute_nonlocal_entities(const mesh::Mesh& mesh,
 
 /// Add set of points to XDMF xml_node and write data
 void add_points(MPI_Comm comm, pugi::xml_node& xdmf_node, hid_t h5_id,
-                const std::vector<Eigen::Vector3d>& points);
+                const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic, 3,
+                                                    Eigen::RowMajor>>& points);
 
 /// Add topology node to xml_node (includes writing data to XML or HDF5
 /// file)
@@ -144,7 +146,7 @@ void add_data_item(MPI_Comm comm, pugi::xml_node& xml_node, hid_t h5_id,
   }
 }
 
-// Return data which is local
+/// Return data which is local
 template <typename T>
 std::vector<T> compute_value_data(const mesh::MeshFunction<T>& meshfunction)
 {
@@ -164,7 +166,8 @@ std::vector<T> compute_value_data(const mesh::MeshFunction<T>& meshfunction)
     // FIXME: fail with ghosts?
     value_data.resize(meshfunction.values().size());
     std::copy(meshfunction.values().data(),
-              meshfunction.values().data() + meshfunction.values().size(), value_data.begin());
+              meshfunction.values().data() + meshfunction.values().size(),
+              value_data.begin());
   }
   else
   {
@@ -172,10 +175,9 @@ std::vector<T> compute_value_data(const mesh::MeshFunction<T>& meshfunction)
         = xdmf_write::compute_nonlocal_entities(*mesh, cell_dim);
 
     // Get reference to mesh function data array
-    Eigen::Ref<const Eigen::Array<T, Eigen::Dynamic, 1>> mf_values
-        = meshfunction.values();
+    const Eigen::Array<T, Eigen::Dynamic, 1>& mf_values = meshfunction.values();
 
-    for (auto& e : mesh::MeshRange<mesh::MeshEntity>(*mesh, cell_dim))
+    for (auto& e : mesh::MeshRange(*mesh, cell_dim))
     {
       if (non_local_entities.find(e.index()) == non_local_entities.end())
         value_data.push_back(mf_values[e.index()]);

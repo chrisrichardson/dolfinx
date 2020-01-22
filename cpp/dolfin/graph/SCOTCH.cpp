@@ -12,7 +12,6 @@
 #include <dolfin/common/Set.h>
 #include <dolfin/common/Timer.h>
 #include <dolfin/common/log.h>
-#include <dolfin/mesh/CellType.h>
 #include <map>
 #include <numeric>
 #include <set>
@@ -135,11 +134,12 @@ dolfin::graph::SCOTCH::compute_reordering(const Graph& graph,
   std::copy(inverse_permutation_indices.begin(),
             inverse_permutation_indices.end(), inverse_permutation.begin());
 
-  return std::make_pair(std::move(permutation), std::move(inverse_permutation));
+  return std::pair(std::move(permutation), std::move(inverse_permutation));
 }
 //-----------------------------------------------------------------------------
 std::pair<std::vector<int>, std::map<std::int64_t, std::vector<int>>>
 dolfin::graph::SCOTCH::partition(const MPI_Comm mpi_comm,
+                                 const SCOTCH_Num nparts,
                                  const CSRGraph<SCOTCH_Num>& local_graph,
                                  const std::vector<std::size_t>& node_weights,
                                  std::int32_t num_ghost_nodes)
@@ -221,20 +221,17 @@ dolfin::graph::SCOTCH::partition(const MPI_Comm mpi_comm,
     throw std::runtime_error("Consistency error in SCOTCH graph");
 #endif
 
-  // Number of partitions (set equal to number of processes)
-  const SCOTCH_Num npart = num_processes;
-
   // Initialise partitioning strategy
   SCOTCH_Strat strat;
   SCOTCH_stratInit(&strat);
 
   // Set SCOTCH strategy
-  // SCOTCH_stratDgraphMapBuild(&strat, SCOTCH_STRATDEFAULT, npart, npart,
+  // SCOTCH_stratDgraphMapBuild(&strat, SCOTCH_STRATDEFAULT, nparts, nparts,
   // 0.05);
-  SCOTCH_stratDgraphMapBuild(&strat, SCOTCH_STRATSPEED, npart, npart, 0.05);
-  // SCOTCH_stratDgraphMapBuild(&strat, SCOTCH_STRATQUALITY, npart, npart,
+  SCOTCH_stratDgraphMapBuild(&strat, SCOTCH_STRATSPEED, nparts, nparts, 0.05);
+  // SCOTCH_stratDgraphMapBuild(&strat, SCOTCH_STRATQUALITY, nparts, nparts,
   // 0.05);
-  // SCOTCH_stratDgraphMapBuild(&strat, SCOTCH_STRATSCALABILITY, npart, npart,
+  // SCOTCH_stratDgraphMapBuild(&strat, SCOTCH_STRATSCALABILITY, nparts, nparts,
   // 0.15);
 
   // Resize vector to hold cell partition indices with enough extra
@@ -250,7 +247,7 @@ dolfin::graph::SCOTCH::partition(const MPI_Comm mpi_comm,
 
   // Partition graph
   common::Timer timer2("SCOTCH: call SCOTCH_dgraphPart");
-  if (SCOTCH_dgraphPart(&dgrafdat, npart, &strat, _cell_partition.data()))
+  if (SCOTCH_dgraphPart(&dgrafdat, nparts, &strat, _cell_partition.data()))
     throw std::runtime_error("Error during SCOTCH partitioning");
   timer2.stop();
 
@@ -306,7 +303,7 @@ dolfin::graph::SCOTCH::partition(const MPI_Comm mpi_comm,
           // Owning process always goes in first to vector
           sharing_processes.push_back(proc_this);
           sharing_processes.push_back(proc_other);
-          ghost_procs.insert(std::make_pair(i, sharing_processes));
+          ghost_procs.insert(std::pair(i, sharing_processes));
         }
         else
         {
@@ -328,8 +325,8 @@ dolfin::graph::SCOTCH::partition(const MPI_Comm mpi_comm,
   // Only copy the local nodes partition information. Ghost process
   // data is already in the ghost_procs map
 
-  return std::make_pair(std::vector<int>(_cell_partition.begin(),
-                                         _cell_partition.begin() + vertlocnbr),
-                        std::move(ghost_procs));
+  return std::pair(std::vector<int>(_cell_partition.begin(),
+                                    _cell_partition.begin() + vertlocnbr),
+                   std::move(ghost_procs));
 }
 //-----------------------------------------------------------------------------

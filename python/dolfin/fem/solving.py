@@ -135,15 +135,18 @@ def _solve_varproblem(*args, **kwargs):
         A.assemble()
 
         comm = L._cpp_object.mesh().mpi_comm()
-        solver = cpp.la.PETScKrylovSolver(comm)
+        ksp = PETSc.KSP().create(comm)
+        ksp.setOperators(A)
 
-        solver.set_options_prefix("dolfin_solve_")
+        ksp.setOptionsPrefix("dolfin_solve_")
+        opts = PETSc.Options()
+        opts.prefixPush("dolfin_solve_")
         for k, v in petsc_options.items():
-            cpp.la.PETScOptions.set("dolfin_solve_" + k, v)
-        solver.set_from_options()
+            opts[k] = v
+        opts.prefixPop()
 
-        solver.set_operator(A)
-        solver.solve(u.vector(), b)
+        ksp.setFromOptions()
+        ksp.solve(b, u.vector)
 
     # Solve nonlinear variational problem
     else:
@@ -245,18 +248,8 @@ def _extract_eq(eq):
 
 def _extract_u(u):
     "Extract and check argument u"
-    # if hasattr(u, "cpp_object") and isinstance(u.cpp_object(), cpp.function.Function):
-    #     return u.cpp_object()
-    #
-    # if isinstance(u, cpp.function.Function):
-    #     return u
-    if isinstance(u, function.Function):
-        return u
-
-    raise RuntimeError("Expecting second argument to be a Function.")
-    # cpp.dolfin_error("solving.py",
-    #                      "solve variational problem",
-    #                      "Expecting second argument to be a Function")
+    if not isinstance(u, function.Function):
+        raise RuntimeError("Expecting second argument to be a Function.")
     return u
 
 

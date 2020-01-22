@@ -4,6 +4,9 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
+#include "MPICommWrapper.h"
+#include "caster_mpi.h"
+#include "caster_petsc.h"
 #include <Eigen/Dense>
 #include <complex>
 #include <dolfin/common/IndexMap.h>
@@ -21,9 +24,6 @@
 #include <string>
 #include <vector>
 
-#include "MPICommWrapper.h"
-#include "casters.h"
-
 namespace py = pybind11;
 
 namespace dolfin_wrappers
@@ -34,6 +34,7 @@ void common(py::module& m)
   // From dolfin/common/defines.h
   m.attr("has_debug") = dolfin::has_debug();
   m.attr("has_parmetis") = dolfin::has_parmetis();
+  m.attr("has_kahip") = dolfin::has_kahip();
   m.attr("has_petsc_complex") = dolfin::has_petsc_complex();
   m.attr("has_slepc") = dolfin::has_slepc();
 #ifdef HAS_PYBIND11_SLEPC4PY
@@ -63,12 +64,13 @@ void common(py::module& m)
                              "Return owning process for each ghost index")
       .def_property_readonly("ghosts", &dolfin::common::IndexMap::ghosts,
                              py::return_value_policy::reference_internal,
-                             "Return list of ghost indices");
-
-  // dolfin::Table
-  py::class_<dolfin::Table, std::shared_ptr<dolfin::Table>>(m, "Table")
-      .def(py::init<std::string>())
-      .def("str", &dolfin::Table::str);
+                             "Return list of ghost indices")
+      .def("compute_forward_processes",
+           &dolfin::common::IndexMap::compute_forward_processes,
+           "Return mapping from local indices to remote processes where "
+           "each index is ghosted")
+      .def("indices", &dolfin::common::IndexMap::indices,
+           "Return array of global indices for all indices on this process");
 
   // dolfin::common::Timer
   py::class_<dolfin::common::Timer, std::shared_ptr<dolfin::common::Timer>>(
@@ -92,10 +94,11 @@ void common(py::module& m)
     std::set<dolfin::TimingType> _type(type.begin(), type.end());
     return dolfin::timings(_type);
   });
-  m.def("list_timings", [](std::vector<dolfin::TimingType> type) {
-    std::set<dolfin::TimingType> _type(type.begin(), type.end());
-    dolfin::list_timings(_type);
-  });
+  m.def("list_timings",
+        [](const MPICommWrapper comm, std::vector<dolfin::TimingType> type) {
+          std::set<dolfin::TimingType> _type(type.begin(), type.end());
+          dolfin::list_timings(comm.get(), _type);
+        });
 
   // dolfin::SubSystemsManager
   py::class_<dolfin::common::SubSystemsManager,
@@ -128,7 +131,7 @@ void common(py::module& m)
                   &dolfin::common::SubSystemsManager::mpi_initialized)
       .def_static("mpi_finalized",
                   &dolfin::common::SubSystemsManager::mpi_finalized);
-} // namespace dolfin_wrappers
+}
 
 // Interface for MPI
 void mpi(py::module& m)
@@ -213,22 +216,6 @@ void mpi(py::module& m)
       .def_static("sum",
                   [](const MPICommWrapper comm, std::complex<double> value) {
                     return dolfin::MPI::sum(comm.get(), value);
-                  })
-      // templated for dolfin::Table
-      .def_static("max",
-                  [](const MPICommWrapper comm, dolfin::Table value) {
-                    return dolfin::MPI::max(comm.get(), value);
-                  })
-      .def_static("min",
-                  [](const MPICommWrapper comm, dolfin::Table value) {
-                    return dolfin::MPI::min(comm.get(), value);
-                  })
-      .def_static("sum",
-                  [](const MPICommWrapper comm, dolfin::Table value) {
-                    return dolfin::MPI::sum(comm.get(), value);
-                  })
-      .def_static("avg", [](const MPICommWrapper comm, dolfin::Table value) {
-        return dolfin::MPI::avg(comm.get(), value);
-      });
+                  });
 }
 } // namespace dolfin_wrappers

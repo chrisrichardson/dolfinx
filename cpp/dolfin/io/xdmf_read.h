@@ -12,15 +12,16 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/lexical_cast.hpp>
+#include <dolfin/mesh/MeshEntity.h>
 #include <dolfin/mesh/MeshFunction.h>
 #include <dolfin/mesh/MeshIterator.h>
-#include <dolfin/mesh/Vertex.h>
 
 namespace dolfin
 {
 
 namespace io
 {
+/// Low-level methods for reading XDMF files
 namespace xdmf_read
 {
 
@@ -167,8 +168,10 @@ void remap_meshfunction_data(mesh::MeshFunction<T>& meshfunction,
   // vertex of the entity, since we do not know the global_index
   const int cell_dim = meshfunction.dim();
   const auto mesh = meshfunction.mesh();
-  // FIXME : get vertices_per_entity properly
-  const int vertices_per_entity = meshfunction.dim() + 1;
+
+  mesh::CellType cell_type = mesh::cell_entity_type((*mesh).cell_type(), cell_dim);
+  const int vertices_per_entity = mesh::num_cell_vertices(cell_type);
+
   const MPI_Comm comm = mesh->mpi_comm();
   const std::size_t num_processes = MPI::size(comm);
 
@@ -209,16 +212,17 @@ void remap_meshfunction_data(mesh::MeshFunction<T>& meshfunction,
   // directly to the right place
   std::vector<std::vector<std::int64_t>> send_requests(num_processes);
   const std::size_t rank = MPI::rank(comm);
-  for (auto& cell : mesh::MeshRange<mesh::MeshEntity>(*mesh, cell_dim,
-                                                      mesh::MeshRangeType::ALL))
+  const std::vector<std::int64_t>& global_indices
+      = mesh->topology().global_indices(0);
+  for (auto& cell : mesh::MeshRange(*mesh, cell_dim, mesh::MeshRangeType::ALL))
   {
     std::vector<std::int64_t> cell_topology;
     if (cell_dim == 0)
-      cell_topology.push_back(cell.global_index());
+      cell_topology.push_back(global_indices[cell.index()]);
     else
     {
-      for (auto& v : mesh::EntityRange<mesh::Vertex>(cell))
-        cell_topology.push_back(v.global_index());
+      for (auto& v : mesh::EntityRange(cell, 0))
+        cell_topology.push_back(global_indices[v.index()]);
     }
 
     std::sort(cell_topology.begin(), cell_topology.end());
@@ -287,8 +291,7 @@ void remap_meshfunction_data(mesh::MeshFunction<T>& meshfunction,
   MPI::all_to_all(comm, send_values, receive_values);
 
   // Get reference to mesh function data array
-  Eigen::Ref<Eigen::Array<T, Eigen::Dynamic, 1>> mf_values
-      = meshfunction.values();
+  Eigen::Array<T, Eigen::Dynamic, 1>& mf_values = meshfunction.values();
 
   // At this point, receive_topology should only list the local indices
   // and received values should have the appropriate values for each

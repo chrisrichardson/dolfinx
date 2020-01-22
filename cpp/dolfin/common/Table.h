@@ -6,36 +6,46 @@
 
 #pragma once
 
+#include <dolfin/common/MPI.h>
 #include <map>
 #include <set>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace dolfin
 {
-class MPI;
-class XMLTable;
 class TableEntry;
 
 /// This class provides storage and pretty-printing for tables.
 /// Example usage:
 ///
 ///   Table table("Timings");
-///
-///   table("Eigen",  "Assemble") = 0.010;
-///   table("Eigen",  "Solve")    = 0.020;
-///   table("PETSc",  "Assemble") = 0.011;
-///   table("PETSc",  "Solve")    = 0.019;
-///   table("Tpetra", "Assemble") = 0.012;
-///   table("Tpetra", "Solve")    = 0.018;
-///
-///   log::info(table);
+///   table.set("Eigen", "Assemble", 0.010);
+///   table.set("Eigen", "Solve", 0.020);
+///   table.set("PETSc", "Assemble", 0.011);
+///   table.set("PETSc", "Solve", 0.019);
 
 class Table
 {
 public:
+  /// Types of MPI reduction available for Table, to get the max, min or
+  /// average values over an MPI_Comm
+  enum class Reduction
+  {
+    average,
+    max,
+    min
+  };
+
   /// Create empty table
   Table(std::string title = "", bool right_justify = true);
+
+  /// Copy constructor
+  Table(const Table& table) = default;
+
+  /// Move constructor
+  Table(Table&& table) = default;
 
   /// Destructor
   ~Table() = default;
@@ -43,95 +53,46 @@ public:
   /// Assignment operator
   Table& operator=(const Table& table) = default;
 
-  /// Return table entry
-  TableEntry operator()(std::string row, std::string col);
+  /// Move assignment
+  Table& operator=(Table&& table) = default;
 
-  /// Set value of table entry
-  void set(std::string row, std::string col, int value);
-
-  /// Set value of table entry
-  void set(std::string row, std::string col, std::size_t value);
-
-  /// Set value of table entry
-  void set(std::string row, std::string col, double value);
-
-  /// Set value of table entry
-  void set(std::string row, std::string col, std::string value);
+  /// Set table entry
+  /// @param[in] row Row name
+  /// @param[in] col Column name
+  /// @param[in] value The value to set
+  void set(std::string row, std::string col,
+           std::variant<std::string, int, double> value);
 
   /// Get value of table entry
-  std::string get(std::string row, std::string col) const;
+  /// @param[in] row Row name
+  /// @param[in] col Column name
+  /// @returns Returns the entry for requested row and columns
+  std::variant<std::string, int, double> get(std::string row,
+                                             std::string col) const;
 
-  /// Get value of table entry
-  double get_value(std::string row, std::string col) const;
+  /// Do MPI reduction on Table
+  /// @param[in] comm MPI communicator
+  /// @param[in] reduction Type of reduction to perform
+  /// @return Reduced Table
+  Table reduce(MPI_Comm comm, Reduction reduction) const;
 
   /// Table name
   std::string name;
 
-  /// Return informal string representation (pretty-print)
-  std::string str(bool verbose) const;
-
-  /// Return informal string representation for LaTeX
-  std::string str_latex() const;
+  /// Return string representation of the table
+  std::string str() const;
 
 private:
-  // Rows
-  std::vector<std::string> rows;
-  std::set<std::string> row_set;
+  // Row and column names
+  std::vector<std::string> _rows, _cols;
 
-  // Columns
-  std::vector<std::string> cols;
-  std::set<std::string> col_set;
-
-  // Table values as strings
-  std::map<std::pair<std::string, std::string>, std::string> values;
-
-  // Table values as doubles
-  std::map<std::pair<std::string, std::string>, double> dvalues;
+  // Table entry values
+  std::map<std::pair<std::string, std::string>,
+           std::variant<std::string, int, double>>
+      _values;
 
   // True if we should right-justify the table entries
   bool _right_justify;
-
-  // Allow MPI::all_reduce accessing dvalues
-  friend class MPI;
-
-  // Allow XMLTable accessing data
-  friend class XMLTable;
 };
 
-/// This class represents an entry in a Table
-
-class TableEntry
-{
-public:
-  /// Create table entry
-  TableEntry(std::string row, std::string col, Table& table);
-
-  /// Destructor
-  ~TableEntry() = default;
-
-  /// Assign value to table entry
-  const TableEntry& operator=(std::size_t value);
-
-  /// Assign value to table entry
-  const TableEntry& operator=(int value);
-
-  /// Assign value to table entry
-  const TableEntry& operator=(double value);
-
-  /// Assign value to table entry
-  const TableEntry& operator=(std::string value);
-
-  /// Cast to entry value
-  operator std::string() const;
-
-private:
-  // Row
-  std::string _row;
-
-  // Column
-  std::string _col;
-
-  // Table
-  Table& _table;
-};
 } // namespace dolfin

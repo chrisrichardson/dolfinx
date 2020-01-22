@@ -5,9 +5,8 @@
 # :download:`demo_cahn-hilliard.py`, which contains both the variational
 # forms and the solver.
 #
-# This example demonstrates the solution of a particular nonlinear
-# time-dependent fourth-order equation, known as the Cahn-Hilliard
-# equation. In particular it demonstrates the use of
+# This example demonstrates the solution of the Cahn-Hilliard equation,
+# a nonlinear time-dependent fourth-order PDE.
 #
 # * The built-in Newton solver
 # * Advanced use of the base class ``NonlinearProblem``
@@ -107,22 +106,20 @@
 #
 # This demo is implemented in the :download:`demo_cahn-hilliard.py`
 # file.
-#
-# First, the modules :py:mod:`random` :py:mod:`matplotlib`
-# :py:mod:`dolfin` module are imported::
+
 
 import os
 
 import numpy as np
 from petsc4py import PETSc
 
-from dolfin import (MPI, CellType, Function, FunctionSpace, NewtonSolver,
-                    NonlinearProblem, TestFunctions, TrialFunction,
-                    UnitSquareMesh, log)
+from dolfin import (MPI, Function, FunctionSpace, NewtonSolver,
+                    NonlinearProblem, UnitSquareMesh, log)
+from dolfin.cpp.mesh import CellType
 from dolfin.fem.assemble import assemble_matrix, assemble_vector
 from dolfin.io import XDMFFile
-from ufl import (FiniteElement, derivative, diff, dx, grad, inner, split,
-                 variable)
+from ufl import (FiniteElement, TestFunctions, TrialFunction, derivative, diff,
+                 dx, grad, inner, split, variable)
 
 # Save all logging to file
 log.set_output_file("log.txt")
@@ -185,11 +182,11 @@ theta = 0.5      # time stepping family, e.g. theta=1 -> backward Euler, theta=0
 
 # A unit square mesh with 97 (= 96 + 1) vertices in each direction is
 # created, and on this mesh a
-# :py:class:`FunctionSpace<dolfin.functions.functionspace.FunctionSpace>`
+# :py:class:`FunctionSpace<dolfin.function.FunctionSpace>`
 # ``ME`` is built using a pair of linear Lagrangian elements. ::
 
 # Create mesh and build function space
-mesh = UnitSquareMesh(MPI.comm_world, 96, 96, CellType.Type.triangle)
+mesh = UnitSquareMesh(MPI.comm_world, 96, 96, CellType.triangle)
 P1 = FiniteElement("Lagrange", mesh.ufl_cell(), 1)
 ME = FunctionSpace(mesh, P1 * P1)
 
@@ -231,9 +228,11 @@ c0, mu0 = split(u0)
 # then interpolated into a finite element space::
 
 
-def u_init(values, x):
-    values[:, 0] = 0.63 + 0.02 * (0.5 - np.random.rand(x.shape[0]))
-    values[:, 1] = 0.0
+def u_init(x):
+    """Initialise values for c and mu."""
+    values = np.zeros((2, x.shape[1]))
+    values[0] = 0.63 + 0.02 * (0.5 - np.random.rand(x.shape[1]))
+    return values
 
 
 # Create intial conditions and interpolate
@@ -321,23 +320,19 @@ if "CI" in os.environ.keys():
 else:
     T = 50 * dt
 
-u.vector().copy(result=u0.vector())
-u0.vector().ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+u.vector.copy(result=u0.vector)
+u0.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
 while (t < T):
     t += dt
-    r = solver.solve(problem, u.vector())
+    r = solver.solve(problem, u.vector)
     print("Step, num iterations:", int(t / dt), r[0])
-    u.vector().copy(result=u0.vector())
+    u.vector.copy(result=u0.vector)
     file.write(u.sub(0), t)
 
-# The string ``"compressed"`` indicates that the output data should be
-# compressed to reduce the file size. Within the time stepping loop, the
-# solution vector associated with ``u`` is copied to ``u0`` at the
-# beginning of each time step, and the nonlinear problem is solved by
-# calling
-# :py:func:`solver.solve(problem,u.vector())<dolfin.cpp.NewtonSolver.solve>`,
-# with the new solution vector returned in
-# :py:func:`u.vector()<dolfin.cpp.Function.vector>`. The ``c`` component
-# of the solution (the first component of ``u``) is then written to file
-# at every time step.
+# Within the time stepping loop, the nonlinear problem is solved by
+# calling :py:func:`solver.solve(problem,u.vector)<dolfin.cpp.NewtonSolver.solve>`,
+# with the new solution vector returned in :py:func:`u.vector<dolfin.cpp.Function.vector>`.
+# The solution vector associated with ``u`` is copied to ``u0`` at the
+# end of each time step, and the ``c`` component of the solution
+# (the first component of ``u``) is then written to file.

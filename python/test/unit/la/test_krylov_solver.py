@@ -10,14 +10,15 @@ from contextlib import ExitStack
 
 import numpy as np
 import pytest
+from petsc4py import PETSc
 
 import ufl
-from dolfin import (MPI, DirichletBC, Function, FunctionSpace, TestFunction,
-                    TrialFunction, UnitSquareMesh, VectorFunctionSpace)
+from dolfin import (MPI, DirichletBC, Function, FunctionSpace, UnitSquareMesh,
+                    VectorFunctionSpace)
 from dolfin.fem import apply_lifting, assemble_matrix, assemble_vector, set_bc
-from dolfin.la import PETScKrylovSolver, PETScOptions, VectorSpaceBasis
-from petsc4py import PETSc
-from ufl import Identity, dot, dx, grad, inner, sym, tr
+from dolfin.la import VectorSpaceBasis
+from ufl import (Identity, TestFunction, TrialFunction, dot, dx, grad, inner,
+                 sym, tr)
 
 
 def test_krylov_solver_lu():
@@ -35,17 +36,18 @@ def test_krylov_solver_lu():
 
     norm = 13.0
 
-    solver = PETScKrylovSolver(mesh.mpi_comm())
-    solver.set_options_prefix("test_lu_")
-    PETScOptions.set("test_lu_ksp_type", "preonly")
-    PETScOptions.set("test_lu_pc_type", "lu")
-    solver.set_from_options()
+    solver = PETSc.KSP().create(mesh.mpi_comm())
+    solver.setOptionsPrefix("test_lu_")
+    opts = PETSc.Options("test_lu_")
+    opts["ksp_type"] = "preonly"
+    opts["pc_type"] = "lu"
+    solver.setFromOptions()
     x = A.createVecRight()
-    solver.set_operator(A)
-    solver.solve(x, b)
+    solver.setOperators(A)
+    solver.solve(b, x)
 
     # *Tight* tolerance for LU solves
-    assert round(x.norm(PETSc.NormType.N2) - norm, 12) == 0
+    assert x.norm(PETSc.NormType.N2) == pytest.approx(norm, abs=1.0e-12)
 
 
 @pytest.mark.skip
@@ -90,11 +92,11 @@ def test_krylov_samg_solver_elasticity():
         mesh = UnitSquareMesh(MPI.comm_world, N, N)
         V = VectorFunctionSpace(mesh, 'Lagrange', 1)
         bc0 = Function(V)
-        with bc0.vector().localForm() as bc_local:
+        with bc0.vector.localForm() as bc_local:
             bc_local.set(0.0)
 
-        def boundary(x, only_boundary):
-            return [only_boundary] * x.shape(0)
+        def boundary(x):
+            return np.full(x.shape[1], True)
 
         bc = DirichletBC(V.sub(0), bc0, boundary)
         u = TrialFunction(V)
@@ -115,7 +117,7 @@ def test_krylov_samg_solver_elasticity():
         u = Function(V)
 
         # Create near null space basis and orthonormalize
-        null_space = build_nullspace(V, u.vector())
+        null_space = build_nullspace(V, u.vector)
 
         # Attached near-null space to matrix
         A.set_near_nullspace(null_space)
@@ -125,21 +127,23 @@ def test_krylov_samg_solver_elasticity():
 
         # Create PETSC smoothed aggregation AMG preconditioner, and
         # create CG solver
-        solver = PETScKrylovSolver("cg", method)
+        solver = PETSc.KSP().create(mesh.mpi_comm)
+        solver.setType("cg")
 
         # Set matrix operator
-        solver.set_operator(A)
+        solver.setOperators(A)
 
         # Compute solution and return number of iterations
-        return solver.solve(u.vector(), b)
+        return solver.solve(b, u.vector)
 
-    # Set some multigrid smoother parameters
-    PETScOptions.set("mg_levels_ksp_type", "chebyshev")
-    PETScOptions.set("mg_levels_pc_type", "jacobi")
+    # Set some multigrid smoother paramete rs
+    opts = PETSc.Options()
+    opts["mg_levels_ksp_type"] = "chebyshev"
+    opts["mg_levels_pc_type"] = "jacobi"
 
     # Improve estimate of eigenvalues for Chebyshev smoothing
-    PETScOptions.set("mg_levels_esteig_ksp_type", "cg")
-    PETScOptions.set("mg_levels_ksp_chebyshev_esteig_steps", 50)
+    opts["mg_levels_esteig_ksp_type"] = "cg"
+    opts["mg_levels_ksp_chebyshev_esteig_steps"] = 50
 
     # Build list of smoothed aggregation preconditioners
     methods = ["petsc_amg"]

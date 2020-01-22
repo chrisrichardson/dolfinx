@@ -3,9 +3,10 @@ set(HEADERS
   assemble_matrix_impl.h
   assemble_scalar_impl.h
   assemble_vector_impl.h
-  CoordinateMapping.h
+  CoordinateElement.h
   DirichletBC.h
   DiscreteOperators.h
+  dofs_permutation.h
   DofMapBuilder.h
   DofMap.h
   ElementDofLayout.h
@@ -16,7 +17,7 @@ set(HEADERS
   FormCoefficients.h
   FormIntegrals.h
   PETScDMCollection.h
-  ReferenceCellTopology.h
+  ReferenceCellGeometry.h
   SparsityPatternBuilder.h
   PARENT_SCOPE)
 
@@ -25,9 +26,10 @@ set(SOURCES
   assemble_matrix_impl.cpp
   assemble_scalar_impl.cpp
   assemble_vector_impl.cpp
-  CoordinateMapping.cpp
+  CoordinateElement.cpp
   DirichletBC.cpp
   DiscreteOperators.cpp
+  dofs_permutation.cpp
   DofMapBuilder.cpp
   DofMap.cpp
   ElementDofLayout.cpp
@@ -37,6 +39,6 @@ set(SOURCES
   FormCoefficients.cpp
   FormIntegrals.cpp
   PETScDMCollection.cpp
-  ReferenceCellTopology.cpp
+  ReferenceCellGeometry.cpp
   SparsityPatternBuilder.cpp
   PARENT_SCOPE)

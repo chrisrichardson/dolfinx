@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace dolfin
@@ -29,8 +30,8 @@ class FormCoefficients
 {
 public:
   /// Initialise the FormCoefficients, using tuples of
-  /// (original_coeff_position, name, shared_ptr<function::Function>). The
-  /// shared_ptr<Function> may be a nullptr and assigned later.
+  /// (original_coeff_position, name, shared_ptr<function::Function>).
+  /// The shared_ptr<Function> may be a nullptr and assigned later.
   FormCoefficients(
       const std::vector<
           std::tuple<int, std::string, std::shared_ptr<function::Function>>>&
@@ -39,9 +40,9 @@ public:
   /// Get number of coefficients
   int size() const;
 
-  /// Offset for each coefficient expansion array on a cell. Use to pack
-  /// data for multiple coefficients in a flat array. The last entry is
-  /// the size required to store all coefficients.
+  /// Offset for each coefficient expansion array on a cell. Used to
+  /// pack data for multiple coefficients in a flat array. The last
+  /// entry is the size required to store all coefficients.
   std::vector<int> offsets() const;
 
   /// Set coefficient with index i to be a Function
@@ -58,9 +59,13 @@ public:
   int original_position(int i) const;
 
   /// Get index from name of coefficient
+  /// @param[in] name Name of coefficient
+  /// @return Index of the coefficient
   int get_index(std::string name) const;
 
   /// Get name from index of coefficient
+  /// @param[in] index Index of the coefficient
+  /// @return Name of the coefficient
   std::string get_name(int index) const;
 
 private:

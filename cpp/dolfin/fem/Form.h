@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <petscsys.h>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -23,21 +24,20 @@ namespace dolfin
 
 namespace fem
 {
-class CoordinateMapping;
+class CoordinateElement;
 }
 
 namespace function
 {
+class Constant;
 class FunctionSpace;
-}
+} // namespace function
 
 namespace mesh
 {
 class Mesh;
 template <typename T>
 class MeshFunction;
-class Cell;
-class Facet;
 } // namespace mesh
 
 namespace fem
@@ -71,16 +71,27 @@ class Form
 {
 public:
   /// Create form
+  ///
+  /// @param[in] function_spaces Function Spaces
+  /// @param[in] integrals
+  /// @param[in] coefficients
+  /// @param[in] constants
+  ///            Vector of pairs (name, constant). The index in the vector
+  ///            is the position of the constant in the original
+  ///            (nonsimplified) form.
+  /// @param[in] coord_mapping Coordinate mapping
   Form(const std::vector<std::shared_ptr<const function::FunctionSpace>>&
            function_spaces,
        const FormIntegrals& integrals, const FormCoefficients& coefficients,
-       std::shared_ptr<const CoordinateMapping> coord_mapping);
+       const std::vector<
+           std::pair<std::string, std::shared_ptr<const function::Constant>>>
+           constants,
+       std::shared_ptr<const CoordinateElement> coord_mapping);
 
   /// Create form (no UFC integrals). Integrals can be attached later
   /// using FormIntegrals::set_cell_tabulate_tensor. Experimental.
   ///
-  /// @param[in] function_spaces (std::vector<_function::FunctionSpace_>)
-  ///         Vector of function spaces.
+  /// @param[in] function_spaces Vector of function spaces
   Form(const std::vector<std::shared_ptr<const function::FunctionSpace>>&
            function_spaces);
 
@@ -92,125 +103,118 @@ public:
 
   /// Return rank of form (bilinear form = 2, linear form = 1,
   /// functional = 0, etc)
-  ///
-  /// @return std::size_t
-  ///         The rank of the form.
-  std::size_t rank() const;
+  int rank() const;
 
   /// Set coefficient with given number (shared pointer version)
-  ///
-  /// @param[in]  i (std::size_t)
-  ///         The given number.
-  /// @param[in]    coefficient (_Function_)
-  ///         The coefficient.
+  /// @param[in] coefficients Map from coefficient index to the
+  ///                         coefficient
   void set_coefficients(
       std::map<std::size_t, std::shared_ptr<const function::Function>>
           coefficients);
 
   /// Set coefficient with given name (shared pointer version)
-  ///
-  /// @param[in]    name (std::string)
-  ///         The name.
-  /// @param[in]    coefficient (_Function_)
-  ///         The coefficient.
+  /// @param[in] coefficients Map from coefficient name to the
+  ///                         coefficient
   void set_coefficients(
       std::map<std::string, std::shared_ptr<const function::Function>>
           coefficients);
 
-  /// Return original coefficient position for each coefficient (0
-  /// <= i < n)
-  ///
-  /// @return std::size_t
-  ///         The position of coefficient i in original ufl form
+  /// Return original coefficient position for each coefficient (0 <= i
+  /// < n)
+  /// @return The position of coefficient i in original ufl form
   ///         coefficients.
-  std::size_t original_coefficient_position(std::size_t i) const;
+  int original_coefficient_position(int i) const;
 
-  // FIXME: remove this function. Assembler should calculate or put in
-  // utils.
-
-  /// Return the size of the element tensor, needed to create temporary
-  /// space for assemblers. If the largest number of per-element dofs in
-  /// function::FunctionSpace i is N_i, then for a linear form this is
-  /// N_0, and for a bilinear form, N_0*N_1.
+  /// Set constants based on their names
   ///
-  /// @return std::size_t The maximum number of values in a local
-  ///         element tensor
-  std::size_t max_element_tensor_size() const;
+  /// This method is used in command-line workflow, when users set
+  /// constants to the form in cpp file.
+  ///
+  /// Names of the constants must agree with their names in UFL file.
+  void
+  set_constants(std::map<std::string, std::shared_ptr<const function::Constant>>
+                    constants);
+
+  /// Set constants based on their order (without names)
+  ///
+  /// This method is used in Python workflow, when constants are
+  /// automatically attached to the form based on their order in the
+  /// original form.
+  ///
+  /// The order of constants must match their order in original ufl
+  /// Form.
+  void set_constants(
+      std::vector<std::shared_ptr<const function::Constant>> constants);
+
+  /// Check if all constants associated with the form have been set
+  /// @return True if all Form constants have been set
+  bool all_constants_set() const;
+
+  /// Return names of any constants that have not been set
+  /// @return Names of unset constants
+  std::set<std::string> get_unset_constants() const;
 
   /// Set mesh, necessary for functionals when there are no function
   /// spaces
-  ///
-  /// @param[in] mesh (_mesh::Mesh_)
-  ///         The mesh.
+  /// @param[in] mesh The mesh
   void set_mesh(std::shared_ptr<const mesh::Mesh> mesh);
 
   /// Extract common mesh from form
-  ///
-  /// @return mesh::Mesh
-  ///         Shared pointer to the mesh.
+  /// @return The mesh
   std::shared_ptr<const mesh::Mesh> mesh() const;
 
   /// Return function space for given argument
-  ///
-  /// @param  i (std::size_t)
-  ///         Index
-  ///
-  /// @return function::FunctionSpace
-  ///         Function space shared pointer.
-  std::shared_ptr<const function::FunctionSpace>
-  function_space(std::size_t i) const;
-
-  /// Return function spaces for arguments
-  ///
-  /// @return    std::vector<_function::FunctionSpace_>
-  ///         Vector of function space shared pointers.
-  std::vector<std::shared_ptr<const function::FunctionSpace>>
-  function_spaces() const;
+  /// @param[in] i Index of the argument
+  /// @return Function space
+  std::shared_ptr<const function::FunctionSpace> function_space(int i) const;
 
   /// Register the function for 'tabulate_tensor' for cell integral i
-  void register_tabulate_tensor_cell(int i, void (*fn)(PetscScalar*,
-                                                       const PetscScalar*,
-                                                       const double*,
-                                                       const int*, const int*));
+  void set_tabulate_tensor(
+      FormIntegrals::Type type, int i,
+      std::function<void(PetscScalar*, const PetscScalar*, const PetscScalar*,
+                         const double*, const int*, const int*)>
+          fn);
 
   /// Set cell domains
-  ///
-  /// @param[in]    cell_domains (_mesh::MeshFunction_ <std::size_t>)
-  ///         The cell domains.
+  /// @param[in] cell_domains The cell domains
   void set_cell_domains(const mesh::MeshFunction<std::size_t>& cell_domains);
 
   /// Set exterior facet domains
-  ///
-  ///  @param[in]   exterior_facet_domains (_mesh::MeshFunction_ <std::size_t>)
-  ///         The exterior facet domains.
+  /// @param[in] exterior_facet_domains The exterior facet domains
   void set_exterior_facet_domains(
       const mesh::MeshFunction<std::size_t>& exterior_facet_domains);
 
   /// Set interior facet domains
-  ///
-  ///  @param[in]   interior_facet_domains (_mesh::MeshFunction_ <std::size_t>)
-  ///         The interior facet domains.
+  /// @param[in] interior_facet_domains The interior facet domains
   void set_interior_facet_domains(
       const mesh::MeshFunction<std::size_t>& interior_facet_domains);
 
   /// Set vertex domains
-  ///
-  ///  @param[in]   vertex_domains (_mesh::MeshFunction_ <std::size_t>)
-  ///         The vertex domains.
+  /// @param[in] vertex_domains The vertex domains.
   void
   set_vertex_domains(const mesh::MeshFunction<std::size_t>& vertex_domains);
 
-  /// Access coefficients (non-const)
-  FormCoefficients& coeffs() { return _coefficients; }
+  /// Access coefficients
+  FormCoefficients& coefficients();
 
-  /// Access coefficients (const)
-  const FormCoefficients& coeffs() const { return _coefficients; }
+  /// Access coefficients
+  const FormCoefficients& coefficients() const;
 
-  /// Access form integrals (const)
-  const FormIntegrals& integrals() const { return _integrals; }
+  /// Access form integrals
+  const FormIntegrals& integrals() const;
+
+  /// Access constants
+  ///
+  /// @return Vector of attached constants with their names.
+  ///         Names are used to set constants in user's c++ code.
+  ///         Index in the vector is the position of the constant in the
+  ///         original (nonsimplified) form.
+  const std::vector<
+      std::pair<std::string, std::shared_ptr<const function::Constant>>>&
+  constants() const;
 
   /// Get coordinate_mapping (experimental)
-  std::shared_ptr<const fem::CoordinateMapping> coordinate_mapping() const;
+  std::shared_ptr<const fem::CoordinateElement> coordinate_mapping() const;
 
 private:
   // Integrals associated with the Form
@@ -219,6 +223,10 @@ private:
   // Coefficients associated with the Form
   FormCoefficients _coefficients;
 
+  // Constants associated with the Form
+  std::vector<std::pair<std::string, std::shared_ptr<const function::Constant>>>
+      _constants;
+
   // Function spaces (one for each argument)
   std::vector<std::shared_ptr<const function::FunctionSpace>> _function_spaces;
 
@@ -226,7 +234,7 @@ private:
   std::shared_ptr<const mesh::Mesh> _mesh;
 
   // Coordinate_mapping
-  std::shared_ptr<const fem::CoordinateMapping> _coord_mapping;
+  std::shared_ptr<const fem::CoordinateElement> _coord_mapping;
 };
 } // namespace fem
 } // namespace dolfin

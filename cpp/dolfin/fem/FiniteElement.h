@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "ReferenceCellTopology.h"
 #include <dolfin/common/types.h>
+#include <dolfin/mesh/cell_types.h>
 #include <functional>
 #include <memory>
 #include <petscsys.h>
@@ -22,32 +22,25 @@ namespace dolfin
 
 namespace fem
 {
-
+/// Finite Element, containing the dof layout on a reference element, and
+/// various methods for evaluating and transforming the basis.
 class FiniteElement
 {
 public:
   /// Create finite element from UFC finite element
-  /// @param element (ufc::finite_element)
-  ///  UFC finite element
-  FiniteElement(const ufc_finite_element& element);
+  /// @param[in] ufc_element UFC finite element
+  FiniteElement(const ufc_finite_element& ufc_element);
 
   /// Destructor
   virtual ~FiniteElement() = default;
 
   /// Return a string identifying the finite element
-  /// @return std::string
   std::string signature() const;
 
   /// Return the cell shape
-  /// @return CellShape
-  CellType cell_shape() const;
-
-  /// Return the topological dimension of the cell shape
-  /// @return std::size_t
-  std::size_t topological_dimension() const;
+  mesh::CellType cell_shape() const;
 
   /// Return the dimension of the finite element function space
-  /// @return std::size_t
   std::size_t space_dimension() const;
 
   /// Return the value size, e.g. 1 for a scalar function, 2 for a 2D
@@ -76,31 +69,33 @@ public:
   // reference_values[num_points][num_dofs][reference_value_size]
   void evaluate_reference_basis(
       Eigen::Tensor<double, 3, Eigen::RowMajor>& reference_values,
-      const Eigen::Ref<const EigenRowArrayXXd> X) const;
+      const Eigen::Ref<const Eigen::Array<
+          double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& X) const;
 
   /// Push basis functions forward to physical element
   void transform_reference_basis(
       Eigen::Tensor<double, 3, Eigen::RowMajor>& values,
       const Eigen::Tensor<double, 3, Eigen::RowMajor>& reference_values,
-      const Eigen::Ref<const EigenRowArrayXXd> X,
+      const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic,
+                                          Eigen::Dynamic, Eigen::RowMajor>>& X,
       const Eigen::Tensor<double, 3, Eigen::RowMajor>& J,
-      const Eigen::Ref<const EigenArrayXd> detJ,
+      const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic, 1>>& detJ,
       const Eigen::Tensor<double, 3, Eigen::RowMajor>& K) const;
 
   /// Push basis function (derivatives) forward to physical element
   void transform_reference_basis_derivatives(
       Eigen::Tensor<double, 4, Eigen::RowMajor>& values, std::size_t order,
       const Eigen::Tensor<double, 4, Eigen::RowMajor>& reference_values,
-      const Eigen::Ref<const EigenRowArrayXXd> X,
+      const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic,
+                                          Eigen::Dynamic, Eigen::RowMajor>>& X,
       const Eigen::Tensor<double, 3, Eigen::RowMajor>& J,
-      const Eigen::Ref<const EigenArrayXd> detJ,
+      const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic, 1>>& detJ,
       const Eigen::Tensor<double, 3, Eigen::RowMajor>& K) const;
 
   /// Tabulate the reference coordinates of all dofs on an element
-  ///
-  /// @return    reference_coordinates (EigenRowArrayXXd)
-  ///         The coordinates of all dofs on the reference cell.
-  const EigenRowArrayXXd& dof_reference_coordinates() const;
+  /// @return The coordinates of all dofs on the reference cell
+  const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
+  dof_reference_coordinates() const;
 
   /// Map values of field from physical to reference space which has
   /// been evaluated at points given by dof_reference_coordinates()
@@ -109,24 +104,24 @@ public:
       const Eigen::Ref<const Eigen::Array<PetscScalar, Eigen::Dynamic,
                                           Eigen::Dynamic, Eigen::RowMajor>>&
           physical_values,
-      const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const;
+      const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic,
+                                          Eigen::Dynamic, Eigen::RowMajor>>&
+          coordinate_dofs) const;
 
   /// Return the number of sub elements (for a mixed element)
-  /// @return int
-  ///   number of sub-elements
   int num_sub_elements() const;
 
   /// Return simple hash of the signature string
   std::size_t hash() const;
 
   /// Extract sub finite element for component
-  std::shared_ptr<FiniteElement>
+  std::shared_ptr<const FiniteElement>
   extract_sub_element(const std::vector<int>& component) const;
 
 private:
   std::string _signature, _family;
 
-  CellType _cell_shape;
+  mesh::CellType _cell_shape;
 
   int _tdim, _space_dim, _value_size, _reference_value_size, _degree;
 
@@ -134,10 +129,10 @@ private:
   Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> _refX;
 
   // List of sub-elements (if any)
-  std::vector<std::shared_ptr<FiniteElement>> _sub_elements;
+  std::vector<std::shared_ptr<const FiniteElement>> _sub_elements;
 
   // Recursively extract sub finite element
-  static std::shared_ptr<FiniteElement>
+  static std::shared_ptr<const FiniteElement>
   extract_sub_element(const FiniteElement& finite_element,
                       const std::vector<int>& component);
 

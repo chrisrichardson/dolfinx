@@ -48,7 +48,7 @@ class Form(ufl.Form):
 
         # For every argument in form extract its function space
         function_spaces = [
-            func.function_space()._cpp_object for func in form.arguments()
+            func.ufl_function_space()._cpp_object for func in form.arguments()
         ]
 
         # Prepare dolfin.Form and hold it as a member
@@ -61,6 +61,11 @@ class Form(ufl.Form):
             j = self._cpp_object.original_coefficient_position(i)
             self._cpp_object.set_coefficient(
                 i, original_coefficients[j]._cpp_object)
+
+        # Constants are set based on their position in original form
+        original_constants = [c._cpp_object for c in form.constants()]
+
+        self._cpp_object.set_constants(original_constants)
 
         if mesh is None:
             raise RuntimeError("Expecting to find a Mesh in the form.")

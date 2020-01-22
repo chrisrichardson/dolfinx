@@ -87,11 +87,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import dolfin
-from dolfin import (MPI, DirichletBC, Function, FunctionSpace, TestFunctions,
-                    TrialFunctions, interpolate, solve)
+from dolfin import MPI, DirichletBC, Function, FunctionSpace, solve
 from dolfin.io import XDMFFile
 from dolfin.plotting import plot
-from ufl import FiniteElement, VectorElement, div, dx, grad, inner
+from ufl import (FiniteElement, TestFunctions, TrialFunctions, VectorElement,
+                 div, dx, grad, inner)
 
 # Load mesh and subdomains
 xdmf = XDMFFile(MPI.comm_world, "../dolfin_fine.xdmf")
@@ -103,10 +103,9 @@ cmap = dolfin.fem.create_coordinate_map(mesh.ufl_domain())
 mesh.geometry.coord_mapping = cmap
 
 # Next, we define a :py:class:`FunctionSpace
-# <dolfin.functions.functionspace.FunctionSpace>` built on a mixed
-# finite element ``TH`` which consists of continuous
-# piecewise quadratics and continuous piecewise
-# linears::
+# <dolfin.function.FunctionSpace>` built on a mixed finite element
+# ``TH`` which consists of continuous piecewise quadratics and
+# continuous piecewise linears::
 
 # Define function spaces
 P2 = VectorElement("Lagrange", mesh.ufl_cell(), 2)
@@ -118,25 +117,16 @@ W = FunctionSpace(mesh, TH)
 # It is a stable, standard element pair for the Stokes
 # equations. Now we can define boundary conditions::
 
-# No-slip boundary condition for velocity
-# x1 = 0, x1 = 1 and around the dolphin
-
-
-class NoSlip:
-    """Evaluate the no-slip condition"""
-
-    def eval(self, values, x):
-        values[:, :] = 0.0
-
 
 # Extract subdomain facet arrays
 mf = sub_domains.values
 mf0 = np.where(mf == 0)
 mf1 = np.where(mf == 1)
 
-# noslip_expr = Expression(noslip_eval, shape=(2,))
-noslip_expr = NoSlip()
-noslip = interpolate(noslip_expr.eval, W.sub(0).collapse())
+# No-slip boundary condition for velocity
+# x1 = 0, x1 = 1 and around the dolphin
+noslip = Function(W.sub(0).collapse())
+noslip.interpolate(lambda x: np.zeros_like(x[:mesh.geometry.dim]))
 
 bc0 = DirichletBC(W.sub(0), noslip, mf0[0])
 
@@ -144,12 +134,14 @@ bc0 = DirichletBC(W.sub(0), noslip, mf0[0])
 # x0 = 1
 
 
-def inflow_eval(values, x):
-    values[:, 0] = - np.sin(x[:, 1] * np.pi)
-    values[:, 1] = 0.0
+def inflow_eval(x):
+    values = np.zeros((2, x.shape[1]))
+    values[0] = - np.sin(x[1] * np.pi)
+    return values
 
 
-inflow = interpolate(inflow_eval, W.sub(0).collapse())
+inflow = Function(W.sub(0).collapse())
+inflow.interpolate(inflow_eval)
 bc1 = DirichletBC(W.sub(0), inflow, mf1[0])
 
 # Collect boundary conditions
@@ -199,12 +191,11 @@ p = w.sub(1).collapse()
 
 # We can calculate the :math:`L^2` norms of u and p as follows::
 
-print("Norm of velocity coefficient vector: %.15g" % u.vector().norm())
-print("Norm of pressure coefficient vector: %.15g" % p.vector().norm())
+print("Norm of velocity coefficient vector: %.15g" % u.vector.norm())
+print("Norm of pressure coefficient vector: %.15g" % p.vector.norm())
 
 # Check pressure norm
-pnorm = p.vector().norm()
-assert np.isclose(pnorm, 4147.69457577)
+assert np.isclose(p.vector.norm(), 4147.69457577)
 
 # Finally, we can save and plot the solutions::
 

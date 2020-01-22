@@ -4,16 +4,20 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include "casters.h"
+#include "caster_mpi.h"
+#include "caster_petsc.h"
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/io/HDF5File.h>
+#include <dolfin/io/VTKFile.h>
 #include <dolfin/io/XDMFFile.h>
+#include <dolfin/io/cells.h>
 #include <dolfin/la/PETScVector.h>
 #include <dolfin/mesh/Mesh.h>
 #include <dolfin/mesh/MeshFunction.h>
 #include <dolfin/mesh/MeshValueCollection.h>
 #include <memory>
+#include <pybind11/eigen.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -27,6 +31,11 @@ namespace dolfin_wrappers
 
 void io(py::module& m)
 {
+
+  // dolfin::io::cell permutation functions
+  m.def("permutation_vtk_to_dolfin", &dolfin::io::cells::vtk_to_dolfin);
+  m.def("permute_cell_ordering", &dolfin::io::cells::permute_ordering);
+
   // dolfin::io::HDF5File
   py::class_<dolfin::io::HDF5File, std::shared_ptr<dolfin::io::HDF5File>>(
       m, "HDF5File", py::dynamic_attr())
@@ -111,7 +120,7 @@ void io(py::module& m)
            py::arg("meshfunction"), py::arg("name"))
       .def("write",
            [](dolfin::io::HDF5File& self, Vec x, std::string s) {
-             dolfin::la::PETScVector _x(x);
+             dolfin::la::PETScVector _x(x, true);
              self.write(_x, s);
            },
            py::arg("vector"), py::arg("name"))
@@ -198,21 +207,19 @@ void io(py::module& m)
                &dolfin::io::XDMFFile::write),
            py::arg("mvc"))
       // Points
+      .def(
+          "write",
+          py::overload_cast<const Eigen::Ref<
+              const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>>&>(
+              &dolfin::io::XDMFFile::write),
+          py::arg("points"))
       .def("write",
-           [](dolfin::io::XDMFFile& instance, py::list points) {
-             auto _points = points.cast<std::vector<Eigen::Vector3d>>();
-             instance.write(_points);
-           },
-           py::arg("points"))
-      // Points with values
-      .def("write",
-           [](dolfin::io::XDMFFile& instance, py::list points,
-              std::vector<double>& values) {
-             auto _points = points.cast<std::vector<Eigen::Vector3d>>();
-             instance.write(_points, values);
-           },
+           py::overload_cast<const Eigen::Ref<const Eigen::Array<
+                                 double, Eigen::Dynamic, 3, Eigen::RowMajor>>&,
+                             const std::vector<double>&>(
+               &dolfin::io::XDMFFile::write),
            py::arg("points"), py::arg("values"))
-      // Check points
+      // Checkpoints
       .def("write_checkpoint",
            [](dolfin::io::XDMFFile& instance,
               const dolfin::function::Function& u, std::string function_name,
@@ -221,6 +228,56 @@ void io(py::module& m)
            },
            py::arg("u"), py::arg("function_name"), py::arg("time_step") = 0.0);
 
+  // dolfin::io::VTKFile
+  py::class_<dolfin::io::VTKFile, std::shared_ptr<dolfin::io::VTKFile>>
+      vtk_file(m, "VTKFile");
+
+  vtk_file
+      .def(py::init([](std::string filename) {
+             return std::make_unique<dolfin::io::VTKFile>(filename);
+           }),
+           py::arg("filename"))
+      .def("write",
+           py::overload_cast<const dolfin::function::Function&>(
+               &dolfin::io::VTKFile::write),
+           py::arg("u"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::Mesh&>(
+               &dolfin::io::VTKFile::write),
+           py::arg("mesh"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::MeshFunction<std::size_t>&>(
+               &dolfin::io::VTKFile::write),
+           py::arg("mf"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::MeshFunction<std::size_t>&,
+                             double>(&dolfin::io::VTKFile::write),
+           py::arg("mf"), py::arg("t"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::MeshFunction<bool>&>(
+               &dolfin::io::VTKFile::write),
+           py::arg("mf"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::MeshFunction<bool>&, double>(
+               &dolfin::io::VTKFile::write),
+           py::arg("mf"), py::arg("t"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::MeshFunction<double>&>(
+               &dolfin::io::VTKFile::write),
+           py::arg("mf"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::MeshFunction<double>&, double>(
+               &dolfin::io::VTKFile::write),
+           py::arg("mf"), py::arg("t"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::MeshFunction<int>&>(
+               &dolfin::io::VTKFile::write),
+           py::arg("mf"))
+      .def("write",
+           py::overload_cast<const dolfin::mesh::MeshFunction<int>&, double>(
+               &dolfin::io::VTKFile::write),
+           py::arg("mf"), py::arg("t"));
+
   // XDFMFile::read
   xdmf_file
       // Mesh
@@ -228,6 +285,10 @@ void io(py::module& m)
            [](dolfin::io::XDMFFile& self,
               const dolfin::mesh::GhostMode ghost_mode) {
              return self.read_mesh(ghost_mode);
+           })
+      .def("read_mesh_data",
+           [](dolfin::io::XDMFFile& self, const MPICommWrapper comm) {
+             return self.read_mesh_data(comm.get());
            })
       // MeshFunction
       .def("read_mf_int", &dolfin::io::XDMFFile::read_mf_int, py::arg("mesh"),

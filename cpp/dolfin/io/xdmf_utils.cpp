@@ -21,21 +21,19 @@
 // #include <dolfin/common/log.h>
 // #include <dolfin/common/utils.h>
 #include <dolfin/fem/DofMap.h>
-// #include <dolfin/fem/ReferenceCellTopology.h>
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
 // #include <dolfin/la/PETScVector.h>
 // #include <dolfin/la/utils.h>
-#include <dolfin/mesh/Cell.h>
-#include <dolfin/mesh/CellType.h>
 // #include <dolfin/mesh/Connectivity.h>
 #include <dolfin/mesh/DistributedMeshTools.h>
-// #include <dolfin/mesh/Edge.h>
 // #include <dolfin/mesh/Mesh.h>
+#include <dolfin/mesh/Geometry.h>
+#include <dolfin/mesh/MeshEntity.h>
 #include <dolfin/mesh/MeshIterator.h>
+#include <dolfin/mesh/cell_types.h>
 // #include <dolfin/mesh/MeshValueCollection.h>
 // #include <dolfin/mesh/Partitioning.h>
-// #include <dolfin/mesh/Vertex.h>
 // #include <iomanip>
 // #include <memory>
 // #include <petscvec.h>
@@ -81,7 +79,8 @@ xdmf_utils::get_cell_type(const pugi::xml_node& topology_node)
          {"triangle_6", {"triangle", 2}},
          {"tetrahedron", {"tetrahedron", 1}},
          {"tetrahedron_10", {"tetrahedron", 2}},
-         {"quadrilateral", {"quadrilateral", 1}}};
+         {"quadrilateral", {"quadrilateral", 1}},
+         {"hexahedron", {"hexahedron", 1}}};
 
   // Convert XDMF cell type string to DOLFIN cell type string
   std::string cell_type = type_attr.as_string();
@@ -210,10 +209,10 @@ std::int64_t xdmf_utils::get_num_cells(const pugi::xml_node& topology_node)
 std::vector<PetscScalar>
 xdmf_utils::get_point_data_values(const function::Function& u)
 {
-  auto mesh = u.function_space()->mesh;
+  std::shared_ptr<const mesh::Mesh> mesh = u.function_space()->mesh();
   assert(mesh);
   Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
-      data_values = u.compute_point_values(*mesh);
+      data_values = u.compute_point_values();
   std::int64_t width = get_padded_width(u);
 
   // FIXME: Unpick the below code for the new layout of data from
@@ -261,8 +260,8 @@ xdmf_utils::get_point_data_values(const function::Function& u)
 std::vector<PetscScalar>
 xdmf_utils::get_cell_data_values(const function::Function& u)
 {
-  assert(u.function_space()->dofmap);
-  const auto mesh = u.function_space()->mesh;
+  assert(u.function_space()->dofmap());
+  const auto mesh = u.function_space()->mesh();
   const int value_size = u.value_size();
   const int value_rank = u.value_rank();
 
@@ -274,10 +273,10 @@ xdmf_utils::get_cell_data_values(const function::Function& u)
   // Build lists of dofs and create map
   std::vector<PetscInt> dof_set;
   dof_set.reserve(local_size);
-  const auto dofmap = u.function_space()->dofmap;
+  const auto dofmap = u.function_space()->dofmap();
   assert(dofmap->element_dof_layout);
   const int ndofs = dofmap->element_dof_layout->num_dofs();
-  for (auto& cell : mesh::MeshRange<mesh::Cell>(*mesh))
+  for (auto& cell : mesh::MeshRange(*mesh, tdim))
   {
     // Tabulate dofs
     auto dofs = dofmap->cell_dofs(cell.index());
@@ -326,19 +325,18 @@ xdmf_utils::get_cell_data_values(const function::Function& u)
   return data_values;
 }
 //-----------------------------------------------------------------------------
-std::string xdmf_utils::vtk_cell_type_str(mesh::CellType::Type cell_type,
-                                          int order)
+std::string xdmf_utils::vtk_cell_type_str(mesh::CellType cell_type, int order)
 {
   // FIXME: Move to CellType?
   switch (cell_type)
   {
-  case mesh::CellType::Type::point:
+  case mesh::CellType::point:
     switch (order)
     {
     case 1:
       return "PolyVertex";
     }
-  case mesh::CellType::Type::interval:
+  case mesh::CellType::interval:
     switch (order)
     {
     case 1:
@@ -346,7 +344,7 @@ std::string xdmf_utils::vtk_cell_type_str(mesh::CellType::Type cell_type,
     case 2:
       return "Edge_3";
     }
-  case mesh::CellType::Type::triangle:
+  case mesh::CellType::triangle:
     switch (order)
     {
     case 1:
@@ -354,7 +352,7 @@ std::string xdmf_utils::vtk_cell_type_str(mesh::CellType::Type cell_type,
     case 2:
       return "Triangle_6";
     }
-  case mesh::CellType::Type::quadrilateral:
+  case mesh::CellType::quadrilateral:
     switch (order)
     {
     case 1:
@@ -362,7 +360,7 @@ std::string xdmf_utils::vtk_cell_type_str(mesh::CellType::Type cell_type,
     case 2:
       return "Quadrilateral_8";
     }
-  case mesh::CellType::Type::tetrahedron:
+  case mesh::CellType::tetrahedron:
     switch (order)
     {
     case 1:
@@ -370,7 +368,7 @@ std::string xdmf_utils::vtk_cell_type_str(mesh::CellType::Type cell_type,
     case 2:
       return "Tetrahedron_10";
     }
-  case mesh::CellType::Type::hexahedron:
+  case mesh::CellType::hexahedron:
     switch (order)
     {
     case 1:

@@ -1,24 +1,25 @@
-// Copyright (C) 2006-2016 Anders Logg
+// Copyright (C) 2006-2019 Anders Logg, Chris Richardson, Jorgen S. Dokken
 //
 // This file is part of DOLFIN (https://www.fenicsproject.org)
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #include "Mesh.h"
-#include "Cell.h"
 #include "Connectivity.h"
 #include "CoordinateDofs.h"
 #include "DistributedMeshTools.h"
-#include "Facet.h"
 #include "Geometry.h"
+#include "MeshEntity.h"
 #include "MeshIterator.h"
 #include "Partitioning.h"
 #include "Topology.h"
 #include "TopologyComputation.h"
-#include "Vertex.h"
+#include "utils.h"
 #include <dolfin/common/MPI.h>
 #include <dolfin/common/Timer.h>
 #include <dolfin/common/utils.h>
+#include <dolfin/io/cells.h>
+#include <dolfin/mesh/cell_types.h>
 
 using namespace dolfin;
 using namespace dolfin::mesh;
@@ -26,80 +27,205 @@ using namespace dolfin::mesh;
 namespace
 {
 //-----------------------------------------------------------------------------
-// Compute map from global node indices to local (contiguous) node
-// indices, and remap cell node topology accordingly
-//
-// @param cell_vertices
-//   Input cell topology (global indexing)
-// @param cell_permutation
-//   Permutation from VTK to DOLFIN index ordering
-// @return
-//   Local-to-global map for nodes (std::vector<std::int64_t>) and cell
-//   nodes in local indexing (EigenRowArrayXXi32)
-std::tuple<std::int32_t, std::vector<std::int64_t>, EigenRowArrayXXi32>
-compute_cell_node_map(std::int32_t num_vertices_per_cell,
-                      const Eigen::Ref<const EigenRowArrayXXi64>& cell_nodes,
-                      const std::vector<std::uint8_t>& cell_permutation)
+Eigen::ArrayXd cell_h(const mesh::Mesh& mesh)
 {
+  const int dim = mesh.topology().dim();
+  const int num_cells = mesh.num_entities(dim);
+  if (num_cells == 0)
+    throw std::runtime_error("Cannnot compute h min/max. No cells.");
+
+  Eigen::ArrayXi cells(num_cells);
+  std::iota(cells.data(), cells.data() + cells.size(), 0);
+  return mesh::h(mesh, cells, dim);
+}
+//-----------------------------------------------------------------------------
+Eigen::ArrayXd cell_r(const mesh::Mesh& mesh)
+{
+  const int dim = mesh.topology().dim();
+  const int num_cells = mesh.num_entities(dim);
+  if (num_cells == 0)
+    throw std::runtime_error("Cannnot compute inradius min/max. No cells.");
+
+  Eigen::ArrayXi cells(num_cells);
+  std::iota(cells.data(), cells.data() + cells.size(), 0);
+  return mesh::inradius(mesh, cells);
+}
+//-----------------------------------------------------------------------------
+std::vector<std::int64_t> compute_global_index_set(
+    Eigen::Ref<const Eigen::Array<std::int64_t, Eigen::Dynamic, Eigen::Dynamic,
+                                  Eigen::RowMajor>>
+        cell_nodes)
+{
+  // Get set of all global points needed locally
   const std::int32_t num_cells = cell_nodes.rows();
   const std::int32_t num_nodes_per_cell = cell_nodes.cols();
+  std::set<std::int64_t> gi_set;
+  for (std::int32_t c = 0; c < num_cells; ++c)
+    for (std::int32_t v = 0; v < num_nodes_per_cell; ++v)
+      gi_set.insert(cell_nodes(c, v));
 
-  // Cell points in local indexing
-  EigenRowArrayXXi32 cell_nodes_local(num_cells, num_nodes_per_cell);
-
-  // Loop over cells to build local-to-global map for (i) vertex nodes,
-  // and (ii) then other nodes
+  return std::vector<std::int64_t>(gi_set.begin(), gi_set.end());
+}
+//-----------------------------------------------------------------------------
+std::pair<std::vector<std::int64_t>, std::array<int, 4>>
+compute_local_to_global_point_map(
+    MPI_Comm mpi_comm, int num_vertices_per_cell,
+    const std::map<std::int64_t, std::set<int>>& point_to_procs,
+    Eigen::Ref<const Eigen::Array<std::int64_t, Eigen::Dynamic, Eigen::Dynamic,
+                                  Eigen::RowMajor>>
+        cell_nodes,
+    mesh::CellType type)
+{
+  int mpi_rank = dolfin::MPI::rank(mpi_comm);
   std::vector<std::int64_t> local_to_global;
-  std::map<std::int64_t, std::int32_t> global_to_local;
-  std::int32_t num_vertices_local = 0;
-  int v0(0), v1(num_vertices_per_cell);
-  for (std::int32_t pass = 0; pass < 2; ++pass)
+  std::array<int, 4> num_vertices_local;
+
+  // Classify all nodes
+  std::set<std::int64_t> local_vertices;
+  std::set<std::int64_t> shared_vertices;
+  std::set<std::int64_t> ghost_vertices;
+  std::set<std::int64_t> non_vertex_nodes;
+
+  const std::int32_t num_cells = cell_nodes.rows();
+  const std::int32_t num_nodes_per_cell = cell_nodes.cols();
+  const std::vector<int> vertex_indices
+      = mesh::cell_vertex_indices(type, num_nodes_per_cell);
+
+  std::vector<int> non_vertex_indices;
+  for (int i = 0; i < num_nodes_per_cell; ++i)
   {
-    for (std::int32_t c = 0; c < num_cells; ++c)
+    if (std::find(vertex_indices.begin(), vertex_indices.end(), i)
+        == vertex_indices.end())
     {
-      // Loop over cell nodes
-      for (std::int32_t v = v0; v < v1; ++v)
+      non_vertex_indices.push_back(i);
+    }
+  }
+
+  for (std::int32_t c = 0; c < num_cells; ++c)
+  {
+    for (int v : vertex_indices)
+    {
+      std::int64_t q = cell_nodes(c, v);
+      auto shared_it = point_to_procs.find(q);
+      if (shared_it == point_to_procs.end())
+        local_vertices.insert(q);
+      else
       {
-        // Get global node index
-        std::int64_t q = cell_nodes(c, v);
-
-        // Insert (global_vertex_index, local_vertex_index) into map. If
-        // global index seen for first time, add to local-to-global map.
-        auto map_it = global_to_local.insert({q, local_to_global.size()});
-        if (map_it.second)
-          local_to_global.push_back(q);
-
-        // Set local node index in cell node list (applying permutation)
-        cell_nodes_local(c, cell_permutation[v]) = map_it.first->second;
+        // If lowest ranked sharing process is greather than this process,
+        // then it is owner
+        if (*(shared_it->second.begin()) > mpi_rank)
+          shared_vertices.insert(q);
+        else
+          ghost_vertices.insert(q);
       }
     }
 
-    // Store number of local vertices
-    if (pass == 0)
-      num_vertices_local = local_to_global.size();
-
-    // Update node loop range for second pass
-    v0 = num_vertices_per_cell;
-    v1 = num_nodes_per_cell;
+    for (int v : non_vertex_indices)
+    {
+      std::int64_t q = cell_nodes(c, v);
+      non_vertex_nodes.insert(q);
+    }
   }
 
-  return std::make_tuple(num_vertices_local, std::move(local_to_global),
-                         std::move(cell_nodes_local));
+  // Now fill local->global map and reorder received points
+  local_to_global.insert(local_to_global.end(), local_vertices.begin(),
+                         local_vertices.end());
+  num_vertices_local[0] = local_to_global.size();
+  local_to_global.insert(local_to_global.end(), shared_vertices.begin(),
+                         shared_vertices.end());
+  num_vertices_local[1] = local_to_global.size();
+  local_to_global.insert(local_to_global.end(), ghost_vertices.begin(),
+                         ghost_vertices.end());
+  num_vertices_local[2] = local_to_global.size();
+  local_to_global.insert(local_to_global.end(), non_vertex_nodes.begin(),
+                         non_vertex_nodes.end());
+  num_vertices_local[3] = local_to_global.size();
+  return std::pair(std::move(local_to_global), num_vertices_local);
+} // namespace
+//-----------------------------------------------------------------------------
+// Get the local points.
+// Returns: local_to_global map for points,
+// shared_points - local_index -> [remote sharing processes]
+// cells_local - cells in local indexing
+// points_local - array of local points
+// num_vertices_local - array[4] with size of (0)local, (1)local+shared,
+// (2)local+shared+ghost, (3)local+shared+ghost+non_vertex points
+std::tuple<
+    std::vector<std::int64_t>, std::map<std::int32_t, std::set<int>>,
+    Eigen::Array<std::int32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>,
+    Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>,
+    std::array<int, 4>>
+compute_point_distribution(
+    MPI_Comm mpi_comm, int num_vertices_per_cell,
+    Eigen::Array<std::int64_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+        cell_nodes,
+    Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+        points,
+    mesh::CellType type)
+{
+  // Get set of global point indices, which exist on this process
+  std::vector<std::int64_t> global_index_set
+      = compute_global_index_set(cell_nodes);
+
+  // Distribute points to processes that need them, and calculate
+  // shared points. Points are returned in same order as in global_index_set.
+  // Sharing information is (global_index -> [remote sharing processes]).
+  auto [shared_points_global, recv_points]
+      = Partitioning::distribute_points(mpi_comm, points, global_index_set);
+
+  // Get local to global mapping for points
+  auto [local_to_global, num_vertices_local]
+      = compute_local_to_global_point_map(mpi_comm, num_vertices_per_cell,
+                                          shared_points_global, cell_nodes,
+                                          type);
+  // Reverse map
+  std::map<std::int64_t, std::int32_t> global_to_local;
+  for (std::size_t i = 0; i < local_to_global.size(); ++i)
+    global_to_local.insert({local_to_global[i], i});
+
+  // Permute received points into local order
+  Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      points_local(recv_points.rows(), recv_points.cols());
+  for (std::size_t i = 0; i < global_index_set.size(); ++i)
+  {
+    int local_idx = global_to_local[global_index_set[i]];
+    points_local.row(local_idx) = recv_points.row(i);
+  }
+
+  // Convert cell_nodes to local indexing
+  Eigen::Array<std::int32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      cells_local(cell_nodes.rows(), cell_nodes.cols());
+  for (int c = 0; c < cell_nodes.rows(); ++c)
+    for (int v = 0; v < cell_nodes.cols(); ++v)
+      cells_local(c, v) = global_to_local[cell_nodes(c, v)];
+
+  // Convert shared points data to local indexing
+  std::map<std::int32_t, std::set<int>> shared_points;
+  for (auto& q : shared_points_global)
+    shared_points.insert({global_to_local[q.first], q.second});
+
+  return std::tuple(std::move(local_to_global), std::move(shared_points),
+                    std::move(cells_local), std::move(points_local),
+                    num_vertices_local);
 }
 //-----------------------------------------------------------------------------
 } // namespace
 
 //-----------------------------------------------------------------------------
-Mesh::Mesh(MPI_Comm comm, mesh::CellType::Type type,
-           const Eigen::Ref<const EigenRowArrayXXd> points,
-           const Eigen::Ref<const EigenRowArrayXXi64> cells,
-           const std::vector<std::int64_t>& global_cell_indices,
-           const GhostMode ghost_mode, std::int32_t num_ghost_cells)
-    : _cell_type(mesh::CellType::create(type)), _degree(1), _mpi_comm(comm),
-      _ghost_mode(ghost_mode), _unique_id(common::UniqueIdGenerator::id())
+Mesh::Mesh(
+    MPI_Comm comm, mesh::CellType type,
+    const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic,
+                                        Eigen::RowMajor>>& points,
+    const Eigen::Ref<const Eigen::Array<
+        std::int64_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& cells,
+    const std::vector<std::int64_t>& global_cell_indices,
+    const GhostMode ghost_mode, std::int32_t num_ghost_cells)
+    : _cell_type(type), _degree(1), _mpi_comm(comm), _ghost_mode(ghost_mode),
+      _unique_id(common::UniqueIdGenerator::id())
 {
-  const std::size_t tdim = _cell_type->dim();
-  const std::int32_t num_vertices_per_cell = _cell_type->num_vertices();
+  const int tdim = mesh::cell_dim(_cell_type);
+  const std::int32_t num_vertices_per_cell
+      = mesh::num_cell_vertices(_cell_type);
 
   // Check size of global cell indices. If empty, construct later.
   if (global_cell_indices.size() > 0
@@ -108,32 +234,9 @@ Mesh::Mesh(MPI_Comm comm, mesh::CellType::Type type,
     throw std::runtime_error(
         "Cannot create mesh. Wrong number of global cell indices");
   }
-
-  // Permutation from VTK to DOLFIN order for cell geometric nodes
-  // FIXME: should do this also for quad/hex
-  // FIXME: remove duplication in CellType::vtk_mapping()
-  std::vector<std::uint8_t> cell_permutation = {0, 1, 2, 3, 4, 5, 6, 7};
-
-  // Infer if the mesh has P2 geometry (P1 has num_vertices_per_cell ==
-  // cells.cols())
-  if (num_vertices_per_cell != cells.cols())
-  {
-    if (type == mesh::CellType::Type::triangle and cells.cols() == 6)
-    {
-      _degree = 2;
-      cell_permutation = {0, 1, 2, 5, 3, 4};
-    }
-    else if (type == mesh::CellType::Type::tetrahedron and cells.cols() == 10)
-    {
-      _degree = 2;
-      cell_permutation = {0, 1, 2, 3, 9, 6, 8, 7, 5, 4};
-    }
-    else
-    {
-      throw std::runtime_error(
-          "Mismatch between cell type and number of vertices per cell");
-    }
-  }
+  // Find degree of mesh
+  // FIXME: degree should probably be in MeshGeometry
+  _degree = mesh::cell_degree(type, cells.cols());
 
   // Get number of nodes (global)
   const std::uint64_t num_points_global = MPI::sum(comm, points.rows());
@@ -147,21 +250,13 @@ Mesh::Mesh(MPI_Comm comm, mesh::CellType::Type type,
   const std::int64_t num_cells_global = MPI::sum(comm, num_cells_local);
 
   // Compute node local-to-global map from global indices, and compute
-  // cell topology using new local indices.
-  std::int32_t num_vertices_local;
-  std::vector<std::int64_t> node_indices_global;
-  Eigen::Array<std::int32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
-      coordinate_nodes;
-  std::tie(num_vertices_local, node_indices_global, coordinate_nodes)
-      = compute_cell_node_map(num_vertices_per_cell, cells, cell_permutation);
-  _coordinate_dofs
-      = std::make_unique<CoordinateDofs>(coordinate_nodes, cell_permutation);
+  // cell topology using new local indices
+  auto [node_indices_global, nodes_shared, coordinate_nodes, points_received,
+        num_vertices_local]
+      = compute_point_distribution(comm, num_vertices_per_cell, cells, points,
+                                   type);
 
-  // Distribute the points across processes and calculate shared nodes
-  EigenRowArrayXXd points_received;
-  std::map<std::int32_t, std::set<std::int32_t>> nodes_shared;
-  std::tie(points_received, nodes_shared)
-      = Partitioning::distribute_points(comm, points, node_indices_global);
+  _coordinate_dofs = std::make_unique<CoordinateDofs>(coordinate_nodes);
 
   // Initialise geometry with global size, actual points, and local to
   // global map
@@ -184,43 +279,41 @@ Mesh::Mesh(MPI_Comm comm, mesh::CellType::Type type,
     // to build a global indexing for vertices
     std::tie(num_vertices_global, vertex_indices_global)
         = Partitioning::build_global_vertex_indices(
-            comm, num_vertices_local, node_indices_global, nodes_shared);
+            comm, num_vertices_local[2], node_indices_global, nodes_shared);
 
     // FIXME: could be useful information. Where should it be kept?
     // Eliminate shared points which are not vertices
     for (auto it = nodes_shared.begin(); it != nodes_shared.end(); ++it)
-      if (it->first < num_vertices_local)
+      if (it->first < num_vertices_local[2])
         shared_vertices.insert(*it);
   }
 
   // Initialise vertex topology
-  _topology = std::make_unique<Topology>(tdim, num_vertices_local,
+  _topology = std::make_unique<Topology>(tdim, num_vertices_local[2],
                                          num_vertices_global);
   _topology->set_global_indices(0, vertex_indices_global);
-  _topology->shared_entities(0) = shared_vertices;
+  _topology->set_shared_entities(0, shared_vertices);
+  _topology->init_ghost(0, num_vertices_local[1]);
+
+  // Set vertex ownership
+  std::vector<int> vertex_owner;
+  for (int i = num_vertices_local[1]; i < num_vertices_local[2]; ++i)
+    vertex_owner.push_back(*(shared_vertices[i].begin()));
+  _topology->set_entity_owner(0, vertex_owner);
 
   // Initialise cell topology
   _topology->set_num_entities_global(tdim, num_cells_global);
   _topology->init_ghost(tdim, num_cells_local);
 
-  // Find the max vertex index of non-ghost cells.
-  if (num_ghost_cells > 0)
-  {
-    const std::uint32_t max_vertex
-        = coordinate_nodes.topLeftCorner(num_cells_local, num_vertices_per_cell)
-              .maxCoeff();
+  // Make cell to vertex connectivity
+  Eigen::Array<std::int32_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      vertex_cols(cells.rows(), num_vertices_per_cell);
+  std::vector<int> vertex_indices
+      = mesh::cell_vertex_indices(type, cells.cols());
+  for (std::int32_t i = 0; i < num_vertices_per_cell; ++i)
+    vertex_cols.col(i) = coordinate_nodes.col(vertex_indices[i]);
+  auto cv = std::make_shared<Connectivity>(vertex_cols);
 
-    // Initialise number of local non-ghost vertices
-    const std::uint32_t num_non_ghost_vertices = max_vertex + 1;
-    _topology->init_ghost(0, num_non_ghost_vertices);
-  }
-  else
-    _topology->init_ghost(0, num_vertices_local);
-
-  // Add cells. Only copies the first few entries on each row
-  // corresponding to vertices.
-  auto cv = std::make_shared<Connectivity>(
-      coordinate_nodes.leftCols(num_vertices_per_cell));
   _topology->set_connectivity(cv, tdim, 0);
 
   // Global cell indices - construct if none given
@@ -238,8 +331,7 @@ Mesh::Mesh(MPI_Comm comm, mesh::CellType::Type type,
 }
 //-----------------------------------------------------------------------------
 Mesh::Mesh(const Mesh& mesh)
-    : _cell_type(CellType::create(mesh._cell_type->type)),
-      _topology(new Topology(*mesh._topology)),
+    : _cell_type(mesh._cell_type), _topology(new Topology(*mesh._topology)),
       _geometry(new Geometry(*mesh._geometry)),
       _coordinate_dofs(new CoordinateDofs(*mesh._coordinate_dofs)),
       _degree(mesh._degree), _mpi_comm(mesh.mpi_comm()),
@@ -250,11 +342,11 @@ Mesh::Mesh(const Mesh& mesh)
 }
 //-----------------------------------------------------------------------------
 Mesh::Mesh(Mesh&& mesh)
-    : _cell_type(CellType::create(mesh._cell_type->type)),
+    : _cell_type(std::move(mesh._cell_type)),
       _topology(std::move(mesh._topology)),
       _geometry(std::move(mesh._geometry)),
-      _coordinate_dofs(std::move(mesh._coordinate_dofs)), _degree(mesh._degree),
-      _mpi_comm(std::move(mesh._mpi_comm)),
+      _coordinate_dofs(std::move(mesh._coordinate_dofs)),
+      _degree(std::move(mesh._degree)), _mpi_comm(std::move(mesh._mpi_comm)),
       _ghost_mode(std::move(mesh._ghost_mode)),
       _unique_id(std::move(mesh._unique_id))
 {
@@ -264,26 +356,6 @@ Mesh::Mesh(Mesh&& mesh)
 Mesh::~Mesh()
 {
   // Do nothing
-}
-//-----------------------------------------------------------------------------
-Mesh& Mesh::operator=(const Mesh& mesh)
-{
-  // Assign data
-  assert(mesh._topology);
-  _topology = std::make_unique<Topology>(*mesh._topology);
-  _geometry = std::make_unique<Geometry>(*mesh._geometry);
-  _coordinate_dofs = std::make_unique<CoordinateDofs>(*mesh._coordinate_dofs);
-  _degree = mesh._degree;
-
-  if (mesh._cell_type)
-    _cell_type.reset(mesh::CellType::create(mesh._cell_type->type));
-  else
-    _cell_type.reset();
-
-  _ghost_mode = mesh._ghost_mode;
-  _unique_id = common::UniqueIdGenerator::id();
-
-  return *this;
 }
 //-----------------------------------------------------------------------------
 std::int32_t Mesh::num_entities(int d) const
@@ -322,18 +394,6 @@ const Geometry& Mesh::geometry() const
   return *_geometry;
 }
 //-----------------------------------------------------------------------------
-mesh::CellType& Mesh::type()
-{
-  assert(_cell_type);
-  return *_cell_type;
-}
-//-----------------------------------------------------------------------------
-const mesh::CellType& Mesh::type() const
-{
-  assert(_cell_type);
-  return *_cell_type;
-}
-//-----------------------------------------------------------------------------
 std::size_t Mesh::create_entities(int dim) const
 {
   // This function is obviously not const since it may potentially
@@ -348,9 +408,13 @@ std::size_t Mesh::create_entities(int dim) const
   if (_topology->connectivity(dim, 0) or dim == 0)
     return _topology->size(dim);
 
-  // Compute connectivity
+  // Compute connectivity to vertices
   Mesh* mesh = const_cast<Mesh*>(this);
+
+  // Create local entities
   TopologyComputation::compute_entities(*mesh, dim);
+  // Number globally
+  DistributedMeshTools::number_entities(*mesh, dim);
 
   return _topology->size(dim);
 }
@@ -363,9 +427,9 @@ void Mesh::create_connectivity(std::size_t d0, std::size_t d1) const
   // const_cast is also needed to allow iterators over a const Mesh to
   // create new connectivity.
 
-  // Skip if already computed
-  if (_topology->connectivity(d0, d1))
-    return;
+  // Make sure entities exist
+  create_entities(d0);
+  create_entities(d1);
 
   // Compute connectivity
   Mesh* mesh = const_cast<Mesh*>(this);
@@ -384,12 +448,6 @@ void Mesh::create_connectivity_all() const
       create_connectivity(d0, d1);
 }
 //-----------------------------------------------------------------------------
-void Mesh::create_global_indices(std::size_t dim) const
-{
-  create_entities(dim);
-  DistributedMeshTools::number_entities(*this, dim);
-}
-//-----------------------------------------------------------------------------
 void Mesh::clean()
 {
   const std::size_t D = _topology->dim();
@@ -403,37 +461,13 @@ void Mesh::clean()
   }
 }
 //-----------------------------------------------------------------------------
-double Mesh::hmin() const
-{
-  double h = std::numeric_limits<double>::max();
-  for (auto& cell : MeshRange<Cell>(*this))
-    h = std::min(h, cell.h());
-  return h;
-}
+double Mesh::hmin() const { return cell_h(*this).minCoeff(); }
 //-----------------------------------------------------------------------------
-double Mesh::hmax() const
-{
-  double h = 0.0;
-  for (auto& cell : MeshRange<Cell>(*this))
-    h = std::max(h, cell.h());
-  return h;
-}
+double Mesh::hmax() const { return cell_h(*this).maxCoeff(); }
 //-----------------------------------------------------------------------------
-double Mesh::rmin() const
-{
-  double r = std::numeric_limits<double>::max();
-  for (auto& cell : MeshRange<Cell>(*this))
-    r = std::min(r, cell.inradius());
-  return r;
-}
+double Mesh::rmin() const { return cell_r(*this).minCoeff(); }
 //-----------------------------------------------------------------------------
-double Mesh::rmax() const
-{
-  double r = 0.0;
-  for (auto& cell : MeshRange<Cell>(*this))
-    r = std::max(r, cell.inradius());
-  return r;
-}
+double Mesh::rmax() const { return cell_r(*this).maxCoeff(); }
 //-----------------------------------------------------------------------------
 std::size_t Mesh::hash() const
 {
@@ -465,14 +499,10 @@ std::string Mesh::str(bool verbose) const
   }
   else
   {
-    std::string cell_type("undefined cell type");
     const int tdim = _topology->dim();
-    if (_cell_type)
-      cell_type = _cell_type->description(true);
-
-    s << "<Mesh of topological dimension " << tdim << " (" << cell_type
-      << ") with " << num_entities(0) << " vertices and " << num_entities(tdim)
-      << " cells >";
+    s << "<Mesh of topological dimension " << tdim << " ("
+      << mesh::to_string(_cell_type) << ") with " << num_entities(0)
+      << " vertices and " << num_entities(tdim) << " cells >";
   }
 
   return s.str();
@@ -495,4 +525,6 @@ const CoordinateDofs& Mesh::coordinate_dofs() const
 }
 //-----------------------------------------------------------------------------
 std::int32_t Mesh::degree() const { return _degree; }
+//-----------------------------------------------------------------------------
+mesh::CellType Mesh::cell_type() const { return _cell_type; }
 //-----------------------------------------------------------------------------

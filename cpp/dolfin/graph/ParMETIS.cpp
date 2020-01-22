@@ -10,7 +10,6 @@
 #include "GraphBuilder.h"
 #include <dolfin/common/MPI.h>
 #include <dolfin/common/Timer.h>
-#include <dolfin/mesh/CellType.h>
 
 #ifdef HAS_PARMETIS
 #include <parmetis.h>
@@ -103,7 +102,7 @@ using namespace dolfin;
 
 //-----------------------------------------------------------------------------
 std::pair<std::vector<int>, std::map<std::int64_t, std::vector<int>>>
-dolfin::graph::ParMETIS::partition(MPI_Comm mpi_comm,
+dolfin::graph::ParMETIS::partition(MPI_Comm mpi_comm, idx_t nparts,
                                    const CSRGraph<idx_t>& csr_graph)
 {
   std::map<std::int64_t, std::vector<int>> ghost_procs;
@@ -115,9 +114,6 @@ dolfin::graph::ParMETIS::partition(MPI_Comm mpi_comm,
   options[0] = 1;
   options[1] = 0;
   options[2] = 15;
-
-  // Number of partitions (one for each process)
-  idx_t nparts = dolfin::MPI::size(mpi_comm);
 
   // Strange weight arrays needed by ParMETIS
   idx_t ncon = 1;
@@ -252,7 +248,7 @@ dolfin::graph::ParMETIS::partition(MPI_Comm mpi_comm,
 
   timer2.stop();
 
-  return std::make_pair(std::vector<int>(part.begin(), part.end()),
+  return std::pair(std::vector<int>(part.begin(), part.end()),
                         std::move(ghost_procs));
 }
 //-----------------------------------------------------------------------------
