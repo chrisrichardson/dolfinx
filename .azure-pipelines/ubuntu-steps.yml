@@ -34,6 +34,7 @@ steps:
     echo $PETSC_DIR
     echo $HOME
     which pip3
+    pip3 -V
     echo $PWD
     # pip3 install -v .
   displayName: Build and install Python interface
