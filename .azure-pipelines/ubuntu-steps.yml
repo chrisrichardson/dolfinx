@@ -30,7 +30,8 @@ steps:
   displayName: Configure and build C++
 
 - bash: |
-    source $HOME/FEniCS/share/dolfin/dolfin.conf
+    # source $HOME/FEniCS/share/dolfin/dolfin.conf
+    source /usr/local/share/dolfin/dolfin.conf
     echo $PETSC_DIR
     echo $HOME
     which pip3
