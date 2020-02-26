@@ -42,21 +42,25 @@ void assemble_matrix(Mat A, const Form& a, const std::vector<bool>& bc0,
                      const std::vector<bool>& bc1);
 
 /// Execute kernel over cells and accumulate result in Mat
+template <typename scalarT, typename indexT>
 void assemble_cells(
-    Mat A, const mesh::Mesh& mesh,
-    const std::vector<std::int32_t>& active_cells,
-    const Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>& dofmap0,
+    void* A,
+    const std::function<int(void*, indexT, const indexT*, indexT, const indexT*,
+                            const scalarT*, InsertMode)>
+        matsetvalueslocal,
+    const mesh::Mesh& mesh, const std::vector<std::int32_t>& active_cells,
+    const Eigen::Ref<const Eigen::Array<indexT, Eigen::Dynamic, 1>>& dofmap0,
     int num_dofs_per_cell0,
-    const Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>& dofmap1,
+    const Eigen::Ref<const Eigen::Array<indexT, Eigen::Dynamic, 1>>& dofmap1,
     int num_dofs_per_cell1, const std::vector<bool>& bc0,
     const std::vector<bool>& bc1,
-    const std::function<void(PetscScalar*, const PetscScalar*,
-                             const PetscScalar*, const double*, const int*,
-                             const std::uint8_t*, const bool*, const bool*,
-                             const std::uint8_t*)>& kernel,
-    const Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic,
+    const std::function<void(scalarT*, const scalarT*, const scalarT*,
+                             const double*, const int*, const std::uint8_t*,
+                             const bool*, const bool*, const std::uint8_t*)>&
+        kernel,
+    const Eigen::Array<scalarT, Eigen::Dynamic, Eigen::Dynamic,
                        Eigen::RowMajor>& coeffs,
-    const std::vector<PetscScalar>& constant_values);
+    const std::vector<scalarT>& constant_values);
 
 /// Execute kernel over exterior facets and  accumulate result in Mat
 void assemble_exterior_facets(

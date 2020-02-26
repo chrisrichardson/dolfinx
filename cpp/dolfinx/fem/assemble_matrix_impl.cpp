@@ -62,14 +62,22 @@ void fem::impl::assemble_matrix(Mat A, const Form& a,
 
   const FormIntegrals& integrals = a.integrals();
   using type = fem::FormIntegrals::Type;
+
+  auto matsetvalueslocal
+      = [](void* _A, PetscInt nr, const PetscInt* rows, PetscInt nc,
+           const PetscInt* cols, const PetscScalar* values, InsertMode mode) {
+          return MatSetValuesLocal((Mat)_A, nr, rows, nc, cols, values, mode);
+        };
+
   for (int i = 0; i < integrals.num_integrals(type::cell); ++i)
   {
     auto& fn = integrals.get_tabulate_tensor(type::cell, i);
     const std::vector<std::int32_t>& active_cells
         = integrals.integral_domains(type::cell, i);
-    fem::impl::assemble_cells(
-        A, mesh, active_cells, dof_array0, num_dofs_per_cell0, dof_array1,
-        num_dofs_per_cell1, bc0, bc1, fn, coeffs, constant_values);
+    fem::impl::assemble_cells<PetscScalar, PetscInt>(
+        (void*)A, matsetvalueslocal, mesh, active_cells, dof_array0,
+        num_dofs_per_cell0, dof_array1, num_dofs_per_cell1, bc0, bc1, fn,
+        coeffs, constant_values);
   }
 
   for (int i = 0; i < integrals.num_integrals(type::exterior_facet); ++i)
@@ -94,21 +102,25 @@ void fem::impl::assemble_matrix(Mat A, const Form& a,
   }
 }
 //-----------------------------------------------------------------------------
+template <typename scalarT, typename indexT>
 void fem::impl::assemble_cells(
-    Mat A, const mesh::Mesh& mesh,
-    const std::vector<std::int32_t>& active_cells,
-    const Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>& dofmap0,
+    void* A,
+    const std::function<int(void*, indexT, const indexT*, indexT, const indexT*,
+                            const scalarT*, InsertMode)>
+        matsetvalueslocal,
+    const mesh::Mesh& mesh, const std::vector<std::int32_t>& active_cells,
+    const Eigen::Ref<const Eigen::Array<indexT, Eigen::Dynamic, 1>>& dofmap0,
     int num_dofs_per_cell0,
-    const Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>& dofmap1,
+    const Eigen::Ref<const Eigen::Array<indexT, Eigen::Dynamic, 1>>& dofmap1,
     int num_dofs_per_cell1, const std::vector<bool>& bc0,
     const std::vector<bool>& bc1,
-    const std::function<void(PetscScalar*, const PetscScalar*,
-                             const PetscScalar*, const double*, const int*,
-                             const std::uint8_t*, const bool*, const bool*,
-                             const std::uint8_t*)>& kernel,
-    const Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic,
+    const std::function<void(scalarT*, const scalarT*, const scalarT*,
+                             const double*, const int*, const std::uint8_t*,
+                             const bool*, const bool*, const std::uint8_t*)>&
+        kernel,
+    const Eigen::Array<scalarT, Eigen::Dynamic, Eigen::Dynamic,
                        Eigen::RowMajor>& coeffs,
-    const std::vector<PetscScalar>& constant_values)
+    const std::vector<scalarT>& constant_values)
 {
   assert(A);
   const int gdim = mesh.geometry().dim();
@@ -129,8 +141,7 @@ void fem::impl::assemble_cells(
   // Data structures used in assembly
   Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       coordinate_dofs(num_dofs_g, gdim);
-  Eigen::Matrix<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
-      Ae;
+  Eigen::Matrix<scalarT, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> Ae;
 
   const Eigen::Ref<const Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic>>
       cell_edge_reflections = mesh.topology().get_edge_reflections();
@@ -182,7 +193,7 @@ void fem::impl::assemble_cells(
       }
     }
 
-    ierr = MatSetValuesLocal(
+    ierr = matsetvalueslocal(
         A, num_dofs_per_cell0, dofmap0.data() + cell_index * num_dofs_per_cell0,
         num_dofs_per_cell1, dofmap1.data() + cell_index * num_dofs_per_cell1,
         Ae.data(), ADD_VALUES);
