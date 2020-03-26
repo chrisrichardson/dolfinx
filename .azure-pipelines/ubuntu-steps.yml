@@ -6,6 +6,7 @@ steps:
   submodules: true
 
 - bash: |
+    cat /proc/cpuinfo
     sudo apt-get -qq update
     sudo apt-get -y install libfreetype6-dev
     sudo pip3 -q install cffi decorator flake8 matplotlib numba pygmsh pytest pytest-xdist sphinx sphinx_rtd_theme --upgrade
