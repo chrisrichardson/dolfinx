@@ -2,7 +2,7 @@
 
 # Copyright (C) 2014-2018 Garth N. Wells
 #
-# This file is part of DOLFIN (https://www.fenicsproject.org)
+# This file is part of DOLFINX (https://www.fenicsproject.org)
 #
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 
@@ -12,12 +12,12 @@ import numpy as np
 import pytest
 
 import ufl
-from dolfin import (MPI, TestFunction, TrialFunction, UnitCubeMesh,
-                    UnitSquareMesh, VectorFunctionSpace, cpp, fem, la)
-from dolfin.cpp.mesh import CellType, GhostMode
-from dolfin.fem import assemble_matrix
-from dolfin.generation import BoxMesh
-from ufl import dx, grad, inner
+from dolfinx import (MPI, UnitCubeMesh, UnitSquareMesh, VectorFunctionSpace,
+                     cpp, fem, la)
+from dolfinx.cpp.mesh import CellType, GhostMode
+from dolfinx.fem import assemble_matrix
+from dolfinx.generation import BoxMesh
+from ufl import TestFunction, TrialFunction, dx, grad, inner
 
 
 def build_elastic_nullspace(V):
@@ -39,7 +39,8 @@ def build_elastic_nullspace(V):
 
         # Build translational null space basis
         for i in range(gdim):
-            V.sub(i).dofmap.set(basis[i], 1.0)
+            dofs = V.sub(i).dofmap.list
+            basis[i][dofs.array()] = 1.0
 
         # Build rotational null space basis
         if gdim == 2:
@@ -69,8 +70,8 @@ def build_broken_elastic_nullspace(V):
         basis = [np.asarray(x) for x in vec_local]
 
         # Build translational null space basis
-        V.sub(0).dofmap.set(basis[0], 1.0)
-        V.sub(1).dofmap.set(basis[1], 1.0)
+        basis[0][V.sub(0).dofmap.list.array()] = 1.0
+        basis[1][V.sub(1).dofmap.list.array()] = 1.0
 
         # Build rotational null space basis
         V.sub(0).set_x(basis[2], -1.0, 1)
@@ -105,7 +106,7 @@ def test_nullspace_orthogonal(mesh, degree):
         MPI.comm_world,
         [np.array([0.8, -0.2, 1.2]),
          np.array([3.0, 11.0, -5.0])], [12, 18, 25],
-        cell_type=CellType.Type.tetrahedron,
+        cell_type=CellType.tetrahedron,
         ghost_mode=GhostMode.none),
 ])
 @pytest.mark.parametrize("degree", [1, 2])

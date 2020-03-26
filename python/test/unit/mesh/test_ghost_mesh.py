@@ -1,13 +1,12 @@
 # Copyright (C) 2016 Garth N. Wells
 #
-# This file is part of DOLFIN (https://www.fenicsproject.org)
+# This file is part of DOLFINX (https://www.fenicsproject.org)
 #
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 
 import pytest
-from dolfin import MPI, UnitIntervalMesh, UnitSquareMesh, UnitCubeMesh, Cell, Cells, Facets, cpp
 
-# See https://bitbucket.org/fenics-project/dolfin/issues/579
+from dolfinx import MPI, UnitCubeMesh, UnitIntervalMesh, UnitSquareMesh, cpp
 
 
 @pytest.mark.xfail(condition=MPI.size(MPI.comm_world) == 1,
@@ -15,8 +14,8 @@ from dolfin import MPI, UnitIntervalMesh, UnitSquareMesh, UnitCubeMesh, Cell, Ce
 def test_ghost_vertex_1d():
     mesh = UnitIntervalMesh(MPI.comm_world, 20,
                             ghost_mode=cpp.mesh.GhostMode.shared_vertex)
-    assert mesh.num_entities_global(0) == 21
-    assert mesh.num_entities_global(1) == 20
+    assert mesh.topology.index_map(0).size_global == 21
+    assert mesh.topology.index_map(1).size_global == 20
 
 
 @pytest.mark.xfail(condition=MPI.size(MPI.comm_world) == 1,
@@ -24,8 +23,8 @@ def test_ghost_vertex_1d():
 def test_ghost_facet_1d():
     mesh = UnitIntervalMesh(MPI.comm_world, 20,
                             ghost_mode=cpp.mesh.GhostMode.shared_facet)
-    assert mesh.num_entities_global(0) == 21
-    assert mesh.num_entities_global(1) == 20
+    assert mesh.topology.index_map(0).size_global == 21
+    assert mesh.topology.index_map(1).size_global == 20
 
 
 @pytest.mark.parametrize("mode", [pytest.param(cpp.mesh.GhostMode.shared_vertex,
@@ -42,8 +41,8 @@ def test_ghost_2d(mode):
     if MPI.size(mesh.mpi_comm()) > 1:
         assert MPI.sum(mesh.mpi_comm(), mesh.num_cells()) > num_cells
 
-    assert mesh.num_entities_global(0) == 81
-    assert mesh.num_entities_global(2) == num_cells
+    assert mesh.topology.index_map(0).size_global == 81
+    assert mesh.topology.index_map(2).size_global == num_cells
 
 
 @pytest.mark.parametrize("mode", [pytest.param(cpp.mesh.GhostMode.shared_vertex,
@@ -60,8 +59,8 @@ def test_ghost_3d(mode):
     if MPI.size(mesh.mpi_comm()) > 1:
         assert MPI.sum(mesh.mpi_comm(), mesh.num_cells()) > num_cells
 
-    assert mesh.num_entities_global(0) == 27
-    assert mesh.num_entities_global(3) == num_cells
+    assert mesh.topology.index_map(0).size_global == 27
+    assert mesh.topology.index_map(3).size_global == num_cells
 
 
 @pytest.mark.parametrize("mode", [cpp.mesh.GhostMode.none,
@@ -79,27 +78,25 @@ def test_ghost_connectivities(mode):
     # Reference mesh, not ghosted, not parallel
     meshR = UnitSquareMesh(MPI.comm_self, 4, 4, ghost_mode=cpp.mesh.GhostMode.none)
     meshR.create_connectivity(1, 2)
+    tdim = meshR.topology.dim
 
     # Create reference mapping from facet midpoint to cell midpoint
     reference = {}
-    for facet in Facets(meshR):
-        fidx = facet.index()
-        facet_mp = tuple(facet.midpoint()[:])
-        reference[facet_mp] = []
-        for cidx in meshR.topology.connectivity(1, 2).connections(fidx):
-            cell = Cell(meshR, cidx)
-            cell_mp = tuple(cell.midpoint()[:])
-            reference[facet_mp].append(cell_mp)
+    facet_mp = cpp.mesh.midpoints(meshR, tdim - 1, range(meshR.num_entities(tdim - 1)))
+    cell_mp = cpp.mesh.midpoints(meshR, tdim, range(meshR.num_entities(tdim)))
+    reference = dict.fromkeys([tuple(row) for row in facet_mp], [])
+    for i in range(meshR.num_entities(tdim - 1)):
+        for cidx in meshR.topology.connectivity(1, 2).links(i):
+            reference[tuple(facet_mp[i])].append(cell_mp[cidx].tolist())
 
     # Loop through ghosted mesh and check connectivities
-    allowable_cell_indices = [c.index() for c in Cells(meshG, cpp.mesh.MeshRangeType.ALL)]
-    for facet in Facets(meshG, cpp.mesh.MeshRangeType.REGULAR):
-        fidx = facet.index()
-        facet_mp = tuple(facet.midpoint()[:])
-        assert facet_mp in reference
-
-        for cidx in meshG.topology.connectivity(1, 2).connections(fidx):
+    tdim = meshG.topology.dim
+    num_facets = meshG.num_entities(tdim - 1) - meshG.topology.index_map(tdim - 1).size_local
+    allowable_cell_indices = range(meshG.num_cells())
+    facet_mp = cpp.mesh.midpoints(meshG, tdim - 1, range(meshG.num_entities(tdim - 1)))
+    cell_mp = cpp.mesh.midpoints(meshG, tdim, range(meshG.num_entities(tdim)))
+    for i in range(num_facets):
+        assert tuple(facet_mp[i]) in reference
+        for cidx in meshG.topology.connectivity(1, 2).links(i):
             assert cidx in allowable_cell_indices
-            cell = Cell(meshG, cidx)
-            cell_mp = tuple(cell.midpoint()[:])
-            assert cell_mp in reference[facet_mp]
+            assert cell_mp[cidx].tolist() in reference[tuple(facet_mp[i])]

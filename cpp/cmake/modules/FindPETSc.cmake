@@ -103,7 +103,7 @@ if (PETSC_FOUND AND NOT TARGET PETSC::petsc_static)
 endif()
 
 # Attempt to build and run PETSc test program
-if (DOLFIN_SKIP_BUILD_TESTS)
+if (DOLFINX_SKIP_BUILD_TESTS)
 
   # Assume PETSc works
   set(PETSC_TEST_RUNS TRUE)
@@ -235,5 +235,5 @@ if (PETSC_FOUND)
 else()
   find_package_handle_standard_args(PETSc
     REQUIRED_VARS PETSC_FOUND
-    FAIL_MESSAGE "PETSc could not be found. Be sure to set PETSC_DIR.")
+    FAIL_MESSAGE "PETSc could not be found. Be sure to set PETSC_DIR as an environment variable.")
 endif()
