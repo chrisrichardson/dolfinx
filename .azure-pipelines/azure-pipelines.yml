@@ -1,7 +1,7 @@
 resources:
   containers:
   - container: dolfinx
-    image: 'quay.io/fenicsproject/dolfinx:dev-env-real'
+    image: 'wells/dolfinx-dev-env:openmpi'
 
 jobs:
 
@@ -11,7 +11,7 @@ jobs:
   pool:
     vmImage: 'Ubuntu 16.04'
 
-  container: wells/dolfinx-dev-env:openmpi
+  container: dolfinx
 
   steps:
   - template: ./ubuntu-steps.yml
