@@ -9,7 +9,6 @@
 #include <Eigen/Dense>
 #include <dolfinx/common/MPI.h>
 #include <memory>
-#include <petscsys.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,12 +42,21 @@ public:
       MPI_Comm comm,
       const std::array<std::shared_ptr<const common::IndexMap>, 2>& index_maps);
 
-  /// Create a new sparsity pattern by adding sub-patterns, e.g.
+  /// Create a new sparsity pattern by concatenating sub-patterns, e.g.
   /// pattern =[ pattern00 ][ pattern 01]
   ///          [ pattern10 ][ pattern 11]
+  ///
+  /// @param[in] comm The MPI communicator
+  /// @param[in] patterns Rectangular array of sparsity pattern. The
+  ///   patterns must not be finalised. Null block are permited
+  /// @param[in] maps Index maps for each row block (maps[0]) and column
+  ///   blocks (maps[1])
   SparsityPattern(
       MPI_Comm comm,
-      const std::vector<std::vector<const SparsityPattern*>>& patterns);
+      const std::vector<std::vector<const SparsityPattern*>>& patterns,
+      const std::array<
+          std::vector<std::reference_wrapper<const common::IndexMap>>, 2>&
+          maps);
 
   SparsityPattern(const SparsityPattern& pattern) = delete;
 
@@ -68,35 +76,24 @@ public:
   std::shared_ptr<const common::IndexMap> index_map(int dim) const;
 
   /// Insert non-zero locations using local (process-wise) indices
-  void insert(
-      const Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>& rows,
-      const Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>& cols);
+  void
+  insert(const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>>&
+             rows,
+         const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>>&
+             cols);
 
   /// Insert non-zero locations on the diagonal
   /// @param[in] rows The rows in local (process-wise) indices. The
   ///   indices must exist in the row IndexMap.
   void insert_diagonal(
-      const Eigen::Ref<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>>& rows);
+      const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>>&
+          rows);
 
   /// Finalize sparsity pattern and communicate off-process entries
   void assemble();
 
   /// Return number of local nonzeros
   std::int64_t num_nonzeros() const;
-
-  /// Fill array with number of nonzeros per row for diagonal block in
-  /// local_range for dimension 0
-  Eigen::Array<std::int32_t, Eigen::Dynamic, 1> num_nonzeros_diagonal() const;
-
-  /// Fill array with number of nonzeros for off-diagonal block in
-  /// local_range for dimension 0. If there is no off-diagonal pattern,
-  /// the returned vector will have zero-length.
-  Eigen::Array<std::int32_t, Eigen::Dynamic, 1>
-  num_nonzeros_off_diagonal() const;
-
-  /// Fill vector with number of nonzeros in local_range for
-  /// dimension 0
-  Eigen::Array<std::int32_t, Eigen::Dynamic, 1> num_local_nonzeros() const;
 
   /// Sparsity pattern for the owned (diagonal) block. Uses local
   /// indices for the columns.
@@ -109,9 +106,6 @@ public:
   /// Return MPI communicator
   MPI_Comm mpi_comm() const;
 
-  /// Return informal string representation (pretty-print)
-  std::string str() const;
-
 private:
   // MPI communicator
   dolfinx::MPI::Comm _mpi_comm;
@@ -123,6 +117,7 @@ private:
   std::vector<std::vector<std::int32_t>> _diagonal_cache;
   std::vector<std::vector<std::int64_t>> _off_diagonal_cache;
 
+  // Sparsity pattern data (computed once pattern is finalised)
   std::shared_ptr<graph::AdjacencyList<std::int32_t>> _diagonal;
   std::shared_ptr<graph::AdjacencyList<std::int64_t>> _off_diagonal;
 };

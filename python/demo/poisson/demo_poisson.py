@@ -76,17 +76,17 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from mpi4py import MPI
+from petsc4py import PETSc
 
 import dolfinx
 import dolfinx.plotting
 import ufl
-from dolfinx import (MPI, DirichletBC, Function, FunctionSpace, RectangleMesh,
-                     solve)
+from dolfinx import DirichletBC, Function, FunctionSpace, RectangleMesh, solve
 from dolfinx.cpp.mesh import CellType
-from dolfinx.io import XDMFFile
-from dolfinx.mesh import compute_marked_boundary_entities
 from dolfinx.fem import locate_dofs_topological
-from dolfinx.specialfunctions import SpatialCoordinate
+from dolfinx.io import XDMFFile
+from dolfinx.mesh import locate_entities_boundary
 from ufl import ds, dx, grad, inner
 
 # We begin by defining a mesh of the domain and a finite element
@@ -98,18 +98,11 @@ from ufl import ds, dx, grad, inner
 
 # Create mesh and define function space
 mesh = RectangleMesh(
-    MPI.comm_world,
+    MPI.COMM_WORLD,
     [np.array([0, 0, 0]), np.array([1, 1, 0])], [32, 32],
     CellType.triangle, dolfinx.cpp.mesh.GhostMode.none)
-m = mesh.topology.index_map(0)
-
-print(m.ghost_owners)
-exit(0)
 
 V = FunctionSpace(mesh, ("Lagrange", 1))
-
-cmap = dolfinx.fem.create_coordinate_map(mesh.ufl_domain())
-mesh.geometry.coord_mapping = cmap
 
 # The second argument to :py:class:`FunctionSpace
 # <dolfinx.function.FunctionSpace>` is the finite element
@@ -147,10 +140,10 @@ mesh.geometry.coord_mapping = cmap
 # Define boundary condition on x = 0 or x = 1
 u0 = Function(V)
 u0.vector.set(0.0)
-facets = compute_marked_boundary_entities(mesh, 1, lambda x: np.logical_or(x[0] < np.finfo(float).eps,
-                                                                           x[0] > 1.0 - np.finfo(float).eps))
+facets = locate_entities_boundary(mesh, 1,
+                                  lambda x: np.logical_or(x[0] < np.finfo(float).eps,
+                                                          x[0] > 1.0 - np.finfo(float).eps))
 bc = DirichletBC(u0, locate_dofs_topological(V, 1, facets))
-
 
 # Next, we want to express the variational problem.  First, we need to
 # specify the trial function :math:`u` and the test function :math:`v`,
@@ -170,7 +163,7 @@ bc = DirichletBC(u0, locate_dofs_topological(V, 1, facets))
 # Define variational problem
 u = ufl.TrialFunction(V)
 v = ufl.TestFunction(V)
-x = SpatialCoordinate(mesh)
+x = ufl.SpatialCoordinate(mesh)
 f = 10 * ufl.exp(-((x[0] - 0.5)**2 + (x[1] - 0.5)**2) / 0.02)
 g = ufl.sin(5 * x[0])
 a = inner(grad(u), grad(v)) * dx
@@ -190,6 +183,7 @@ L = inner(f, v) * dx + inner(g, v) * ds
 u = Function(V)
 solve(a == L, u, bc, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
 
+
 # The function ``u`` will be modified during the call to solve. The
 # default settings for solving a variational problem have been
 # used. However, the solution process can be controlled in much more
@@ -202,11 +196,11 @@ solve(a == L, u, bc, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
 # the :py:func:`plot <dolfinx.common.plot.plot>` command: ::
 
 # Save solution in XDMF format
-with XDMFFile(
-        MPI.comm_world, "poisson.xdmf",
-        encoding=XDMFFile.Encoding.HDF5) as file:
-    file.write(u)
+with XDMFFile(MPI.COMM_WORLD, "poisson.xdmf", "w") as file:
+    file.write_mesh(mesh)
+    file.write_function(u)
 
-# Plot solution
+# Update ghost entries and plot
+u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 dolfinx.plotting.plot(u)
 plt.show()

@@ -14,7 +14,6 @@
 #include <dolfinx/fem/DofMap.h>
 #include <dolfinx/fem/FiniteElement.h>
 #include <dolfinx/graph/AdjacencyList.h>
-#include <dolfinx/mesh/CoordinateDofs.h>
 #include <dolfinx/mesh/Geometry.h>
 #include <dolfinx/mesh/Mesh.h>
 #include <dolfinx/mesh/Topology.h>
@@ -83,24 +82,22 @@ void FunctionSpace::interpolate_from_any(
   const int tdim = _mesh->topology().dim();
 
   // Get dofmaps
-  assert(_dofmap);
-  const fem::DofMap& dofmap = *_dofmap;
   assert(v.function_space());
-  assert(v.function_space()->dofmap());
-  const fem::DofMap& dofmap_v = *v.function_space()->dofmap();
-
+  std::shared_ptr<const fem::DofMap> dofmap_v = v.function_space()->dofmap();
+  assert(dofmap_v);
   auto map = _mesh->topology().index_map(tdim);
   assert(map);
 
   // Iterate over mesh and interpolate on each cell
+  assert(_dofmap);
   la::VecReadWrapper v_vector_wrap(v.vector().vec());
   Eigen::Map<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> v_array
       = v_vector_wrap.x;
   const int num_cells = map->size_local() + map->num_ghosts();
   for (int c = 0; c < num_cells; ++c)
   {
-    auto dofs_v = dofmap_v.cell_dofs(c);
-    auto cell_dofs = dofmap.cell_dofs(c);
+    auto dofs_v = dofmap_v->cell_dofs(c);
+    auto cell_dofs = _dofmap->cell_dofs(c);
     assert(dofs_v.size() == cell_dofs.size());
     for (Eigen::Index i = 0; i < dofs_v.size(); ++i)
       expansion_coefficients[cell_dofs[i]] = v_array[dofs_v[i]];
@@ -233,8 +230,8 @@ FunctionSpace::sub(const std::vector<int>& component) const
       = this->_element->extract_sub_element(component);
 
   // Extract sub dofmap
-  auto dofmap = std::make_shared<fem::DofMap>(
-      _dofmap->extract_sub_dofmap(component, _mesh->topology()));
+  auto dofmap
+      = std::make_shared<fem::DofMap>(_dofmap->extract_sub_dofmap(component));
 
   // Create new sub space
   auto sub_space = std::make_shared<FunctionSpace>(_mesh, element, dofmap);
@@ -292,34 +289,26 @@ FunctionSpace::tabulate_dof_coordinates() const
   assert(_dofmap);
   std::shared_ptr<const common::IndexMap> index_map = _dofmap->index_map;
   assert(index_map);
-  std::size_t bs = index_map->block_size();
-  std::size_t local_size
+  int bs = index_map->block_size();
+  std::int32_t local_size
       = bs * (index_map->size_local() + index_map->num_ghosts());
 
   // Dof coordinate on reference element
   const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& X
       = _element->dof_reference_coordinates();
 
-  // Get coordinate mapping
-  if (!_mesh->geometry().coord_mapping)
-  {
-    throw std::runtime_error(
-        "CoordinateElement has not been attached to mesh.");
-  }
-  const fem::CoordinateElement& cmap = *_mesh->geometry().coord_mapping;
+  // Get coordinate map
+  const fem::CoordinateElement& cmap = _mesh->geometry().cmap();
 
   // Prepare cell geometry
-  const graph::AdjacencyList<std::int32_t>& connectivity_g
-      = _mesh->coordinate_dofs().entity_points();
-  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& pos_g
-      = connectivity_g.offsets();
-  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& cell_g
-      = connectivity_g.array();
+  const graph::AdjacencyList<std::int32_t>& x_dofmap
+      = _mesh->geometry().dofmap();
+
   // FIXME: Add proper interface for num coordinate dofs
-  const int num_dofs_g = connectivity_g.num_links(0);
+  const int num_dofs_g = x_dofmap.num_links(0);
   const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
       x_g
-      = _mesh->geometry().points();
+      = _mesh->geometry().x();
 
   // Array to hold coordinates to return
   Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor> x
@@ -338,8 +327,9 @@ FunctionSpace::tabulate_dof_coordinates() const
   for (int c = 0; c < num_cells; ++c)
   {
     // Update cell
+    auto x_dofs = x_dofmap.links(c);
     for (int i = 0; i < num_dofs_g; ++i)
-      coordinate_dofs.row(i) = x_g.row(cell_g[pos_g[c] + i]).head(gdim);
+      coordinate_dofs.row(i) = x_g.row(x_dofs[i]).head(gdim);
 
     // Get local-to-global map
     auto dofs = _dofmap->cell_dofs(c);
@@ -371,29 +361,21 @@ void FunctionSpace::set_x(
   std::vector<PetscScalar> x_values;
 
   // Prepare cell geometry
-  const graph::AdjacencyList<std::int32_t>& connectivity_g
-      = _mesh->coordinate_dofs().entity_points();
-  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& pos_g
-      = connectivity_g.offsets();
-  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& cell_g
-      = connectivity_g.array();
+  const graph::AdjacencyList<std::int32_t>& x_dofmap
+      = _mesh->geometry().dofmap();
+
   // FIXME: Add proper interface for num coordinate dofs
-  const int num_dofs_g = connectivity_g.num_links(0);
+  const int num_dofs_g = x_dofmap.num_links(0);
   const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
       x_g
-      = _mesh->geometry().points();
+      = _mesh->geometry().x();
 
   // Dof coordinate on reference element
   const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& X
       = _element->dof_reference_coordinates();
 
-  // Get coordinate mapping
-  if (!_mesh->geometry().coord_mapping)
-  {
-    throw std::runtime_error(
-        "CoordinateElement has not been attached to mesh.");
-  }
-  const fem::CoordinateElement& cmap = *_mesh->geometry().coord_mapping;
+  // Get coordinate map
+  const fem::CoordinateElement& cmap = _mesh->geometry().cmap();
 
   Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       coordinates(_element->space_dimension(), _mesh->geometry().dim());
@@ -406,9 +388,9 @@ void FunctionSpace::set_x(
   for (int c = 0; c < num_cells; ++c)
   {
     // Update UFC cell
+    auto x_dofs = x_dofmap.links(c);
     for (int i = 0; i < num_dofs_g; ++i)
-      for (int j = 0; j < gdim; ++j)
-        coordinate_dofs(i, j) = x_g(cell_g[pos_g[c] + i], j);
+      coordinate_dofs.row(i) = x_g.row(x_dofs[i]).head(gdim);
 
     // Get cell local-to-global map
     auto dofs = _dofmap->cell_dofs(c);

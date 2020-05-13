@@ -18,7 +18,6 @@
 #include <dolfinx/graph/AdjacencyList.h>
 #include <dolfinx/la/PETScVector.h>
 #include <dolfinx/la/utils.h>
-#include <dolfinx/mesh/CoordinateDofs.h>
 #include <dolfinx/mesh/Geometry.h>
 #include <dolfinx/mesh/Mesh.h>
 #include <dolfinx/mesh/Topology.h>
@@ -38,20 +37,21 @@ la::PETScVector create_vector(const function::FunctionSpace& V)
   common::Timer timer("Init dof vector");
 
   // Get dof map
-  assert(V.dofmap());
-  const fem::DofMap& dofmap = *(V.dofmap());
+  std::shared_ptr<const fem::DofMap> dofmap = V.dofmap();
+  assert(dofmap);
 
   // Check that function space is not a subspace (view)
-  assert(dofmap.element_dof_layout);
-  if (dofmap.element_dof_layout->is_view())
+  assert(dofmap->element_dof_layout);
+  if (dofmap->element_dof_layout->is_view())
   {
-    std::runtime_error("Cannot initialize vector of degrees of freedom for "
-                       "function. Cannot be created from subspace. Consider "
-                       "collapsing the function space");
+    throw std::runtime_error(
+        "Cannot initialize vector of degrees of freedom for "
+        "function. Cannot be created from subspace. Consider "
+        "collapsing the function space");
   }
 
-  assert(dofmap.index_map);
-  la::PETScVector v = la::PETScVector(*dofmap.index_map);
+  assert(dofmap->index_map);
+  la::PETScVector v = la::PETScVector(*(dofmap->index_map));
   la::VecWrapper _v(v.vec());
   _v.x.setZero();
 
@@ -170,41 +170,33 @@ void Function::eval(
 
   // Get mesh
   assert(_function_space);
-  assert(_function_space->mesh());
-  const mesh::Mesh& mesh = *_function_space->mesh();
-  const int gdim = mesh.geometry().dim();
-  const int tdim = mesh.topology().dim();
+  std::shared_ptr<const mesh::Mesh> mesh = _function_space->mesh();
+  assert(mesh);
+  const int gdim = mesh->geometry().dim();
+  const int tdim = mesh->topology().dim();
 
   // Get geometry data
-  const graph::AdjacencyList<std::int32_t>& connectivity_g
-      = mesh.coordinate_dofs().entity_points();
-  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& pos_g
-      = connectivity_g.offsets();
-  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& cell_g
-      = connectivity_g.array();
+  const graph::AdjacencyList<std::int32_t>& x_dofmap
+      = mesh->geometry().dofmap();
 
   // FIXME: Add proper interface for num coordinate dofs
-  const int num_dofs_g = connectivity_g.num_links(0);
+  const int num_dofs_g = x_dofmap.num_links(0);
   const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& x_g
-      = mesh.geometry().points();
+      = mesh->geometry().x();
   Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       coordinate_dofs(num_dofs_g, gdim);
 
-  // Get coordinate mapping
-  std::shared_ptr<const fem::CoordinateElement> cmap
-      = mesh.geometry().coord_mapping;
-  if (!cmap)
-  {
-    throw std::runtime_error(
-        "fem::CoordinateElement has not been attached to mesh.");
-  }
+  // Get coordinate map
+  const fem::CoordinateElement& cmap = mesh->geometry().cmap();
 
   // Get element
   assert(_function_space->element());
-  const fem::FiniteElement& element = *_function_space->element();
-  const int reference_value_size = element.reference_value_size();
-  const int value_size = element.value_size();
-  const int space_dimension = element.space_dimension();
+  std::shared_ptr<const fem::FiniteElement> element
+      = _function_space->element();
+  assert(element);
+  const int reference_value_size = element->reference_value_size();
+  const int value_size = element->value_size();
+  const int space_dimension = element->space_dimension();
 
   // Prepare geometry data structures
   Eigen::Tensor<double, 3, Eigen::RowMajor> J(1, gdim, tdim);
@@ -220,22 +212,15 @@ void Function::eval(
                                                          value_size);
 
   // Create work vector for expansion coefficients
-  Eigen::Matrix<PetscScalar, 1, Eigen::Dynamic> coefficients(
-      element.space_dimension());
+  Eigen::Matrix<PetscScalar, 1, Eigen::Dynamic> coefficients(space_dimension);
 
   // Get dofmap
-  assert(_function_space->dofmap());
-  const fem::DofMap& dofmap = *_function_space->dofmap();
+  std::shared_ptr<const fem::DofMap> dofmap = _function_space->dofmap();
+  assert(dofmap);
 
-  mesh.create_entity_permutations();
-
-  const Eigen::Ref<const Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic>>
-      cell_edge_reflections = mesh.topology().get_edge_reflections();
-  const Eigen::Ref<const Eigen::Array<bool, Eigen::Dynamic, Eigen::Dynamic>>
-      cell_face_reflections = mesh.topology().get_face_reflections();
-  const Eigen::Ref<
-      const Eigen::Array<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>>
-      cell_face_rotations = mesh.topology().get_face_rotations();
+  mesh->topology_mutable().create_entity_permutations();
+  const Eigen::Array<std::uint32_t, Eigen::Dynamic, 1>& cell_info
+      = mesh->topology().get_cell_permutation_info();
 
   // Loop over points
   u.setZero();
@@ -250,31 +235,23 @@ void Function::eval(
       continue;
 
     // Get cell geometry (coordinate dofs)
+    auto x_dofs = x_dofmap.links(cell_index);
     for (int i = 0; i < num_dofs_g; ++i)
-      for (int j = 0; j < gdim; ++j)
-        coordinate_dofs(i, j) = x_g(cell_g[pos_g[cell_index] + i], j);
+      coordinate_dofs.row(i) = x_g.row(x_dofs[i]).head(gdim);
 
     // Compute reference coordinates X, and J, detJ and K
-    cmap->compute_reference_geometry(X, J, detJ, K, x.row(p).head(gdim),
-                                     coordinate_dofs);
+    cmap.compute_reference_geometry(X, J, detJ, K, x.row(p).head(gdim),
+                                    coordinate_dofs);
 
     // Compute basis on reference element
-    element.evaluate_reference_basis(basis_reference_values, X);
-
-    const Eigen::Ref<const Eigen::Array<bool, Eigen::Dynamic, 1>> e_ref_cell
-        = cell_edge_reflections.col(cell_index);
-    const Eigen::Ref<const Eigen::Array<bool, Eigen::Dynamic, 1>> f_ref_cell
-        = cell_face_reflections.col(cell_index);
-    const Eigen::Ref<const Eigen::Array<std::uint8_t, Eigen::Dynamic, 1>>
-        f_rot_cell = cell_face_rotations.col(cell_index);
+    element->evaluate_reference_basis(basis_reference_values, X);
 
     // Push basis forward to physical element
-    element.transform_reference_basis(basis_values, basis_reference_values, X,
-                                      J, detJ, K, e_ref_cell.data(),
-                                      f_ref_cell.data(), f_rot_cell.data());
+    element->transform_reference_basis(basis_values, basis_reference_values, X,
+                                       J, detJ, K, cell_info[cell_index]);
 
     // Get degrees of freedom for current cell
-    auto dofs = dofmap.cell_dofs(cell_index);
+    auto dofs = dofmap->cell_dofs(cell_index);
     for (Eigen::Index i = 0; i < dofs.size(); ++i)
       coefficients[i] = _v[dofs[i]];
 
@@ -347,46 +324,39 @@ Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
 Function::compute_point_values() const
 {
   assert(_function_space);
-  assert(_function_space->mesh());
-  const mesh::Mesh& mesh = *_function_space->mesh();
-
-  const int tdim = mesh.topology().dim();
+  std::shared_ptr<const mesh::Mesh> mesh = _function_space->mesh();
+  assert(mesh);
+  const int tdim = mesh->topology().dim();
 
   // Compute in tensor (one for scalar function, . . .)
   const std::size_t value_size_loc = value_size();
 
   // Resize Array for holding point values
   Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
-      point_values(mesh.geometry().num_points(), value_size_loc);
-
-  const graph::AdjacencyList<std::int32_t>& cell_dofs
-      = mesh.coordinate_dofs().entity_points();
+      point_values(mesh->geometry().x().rows(), value_size_loc);
 
   // Prepare cell geometry
-  const graph::AdjacencyList<std::int32_t>& connectivity_g
-      = mesh.coordinate_dofs().entity_points();
-  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& pos_g
-      = connectivity_g.offsets();
-  const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>& cell_g
-      = connectivity_g.array();
+  const graph::AdjacencyList<std::int32_t>& x_dofmap = mesh->geometry().dofmap();
+
   // FIXME: Add proper interface for num coordinate dofs
-  const int num_dofs_g = connectivity_g.num_links(0);
+  const int num_dofs_g = x_dofmap.num_links(0);
   const Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor>& x_g
-      = mesh.geometry().points();
+      = mesh->geometry().x();
 
   // Interpolate point values on each cell (using last computed value if
   // not continuous, e.g. discontinuous Galerkin methods)
   Eigen::Array<double, Eigen::Dynamic, 3, Eigen::RowMajor> x(num_dofs_g, 3);
   Eigen::Array<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       values(num_dofs_g, value_size_loc);
-  auto map = mesh.topology().index_map(tdim);
+  auto map = mesh->topology().index_map(tdim);
   assert(map);
   const int num_cells = map->size_local() + map->num_ghosts();
   for (int c = 0; c < num_cells; ++c)
   {
     // Get coordinates for all points in cell
+    auto dofs = x_dofmap.links(c);
     for (int i = 0; i < num_dofs_g; ++i)
-      x.row(i) = x_g.row(cell_g[pos_g[c] + i]);
+      x.row(i) = x_g.row(dofs[i]);
 
     values.resize(x.rows(), value_size_loc);
 
@@ -396,7 +366,6 @@ Function::compute_point_values() const
     eval(x, cells, values);
 
     // Copy values to array of point values
-    auto dofs = cell_dofs.links(c);
     for (int i = 0; i < x.rows(); ++i)
       point_values.row(dofs[i]) = values.row(i);
   }

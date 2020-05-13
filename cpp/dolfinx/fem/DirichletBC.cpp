@@ -13,6 +13,7 @@
 #include <dolfinx/fem/CoordinateElement.h>
 #include <dolfinx/function/Function.h>
 #include <dolfinx/function/FunctionSpace.h>
+#include <dolfinx/graph/AdjacencyList.h>
 #include <dolfinx/mesh/Mesh.h>
 #include <dolfinx/mesh/Topology.h>
 #include <dolfinx/mesh/cell_types.h>
@@ -198,12 +199,12 @@ Eigen::Array<std::int32_t, Eigen::Dynamic, 2> _locate_dofs_topological(
   const function::FunctionSpace& V1 = V.at(1).get();
 
   // Get mesh
-  assert(V0.mesh());
+  std::shared_ptr<const mesh::Mesh> mesh = V0.mesh();
+  assert(mesh);
   assert(V1.mesh());
-  if (V0.mesh() != V1.mesh())
+  if (mesh != V1.mesh())
     throw std::runtime_error("Meshes are not the same.");
-  const mesh::Mesh& mesh = *V0.mesh();
-  const std::size_t tdim = mesh.topology().dim();
+  const int tdim = mesh->topology().dim();
 
   assert(V0.element());
   assert(V1.element());
@@ -214,31 +215,32 @@ Eigen::Array<std::int32_t, Eigen::Dynamic, 2> _locate_dofs_topological(
   }
 
   // Get dofmaps
-  assert(V0.dofmap());
-  assert(V1.dofmap());
-  const DofMap& dofmap0 = *V0.dofmap();
-  const DofMap& dofmap1 = *V1.dofmap();
+  std::shared_ptr<const fem::DofMap> dofmap0 = V0.dofmap();
+  std::shared_ptr<const fem::DofMap> dofmap1 = V1.dofmap();
+  assert(dofmap0);
+  assert(dofmap1);
 
   // Initialise entity-cell connectivity
-  mesh.create_entities(tdim);
-  mesh.create_connectivity(dim, tdim);
+  // FIXME: cleanup these calls? Some of the happen internally again.
+  mesh->topology_mutable().create_entities(tdim);
+  mesh->topology_mutable().create_connectivity(dim, tdim);
 
   // Allocate space
-  assert(dofmap0.element_dof_layout);
+  assert(dofmap0->element_dof_layout);
   const int num_entity_dofs
-      = dofmap0.element_dof_layout->num_entity_closure_dofs(dim);
+      = dofmap0->element_dof_layout->num_entity_closure_dofs(dim);
 
   // Build vector local dofs for each cell facet
   std::vector<Eigen::Array<int, Eigen::Dynamic, 1>> entity_dofs;
-  for (int i = 0; i < mesh::cell_num_entities(mesh.topology().cell_type(), dim);
+  for (int i = 0; i < mesh::cell_num_entities(mesh->topology().cell_type(), dim);
        ++i)
   {
     entity_dofs.push_back(
-        dofmap0.element_dof_layout->entity_closure_dofs(dim, i));
+        dofmap0->element_dof_layout->entity_closure_dofs(dim, i));
   }
-  auto e_to_c = mesh.topology().connectivity(dim, tdim);
+  auto e_to_c = mesh->topology().connectivity(dim, tdim);
   assert(e_to_c);
-  auto c_to_e = mesh.topology().connectivity(tdim, dim);
+  auto c_to_e = mesh->topology().connectivity(tdim, dim);
   assert(c_to_e);
 
   // Iterate over marked facets
@@ -251,14 +253,14 @@ Eigen::Array<std::int32_t, Eigen::Dynamic, 2> _locate_dofs_topological(
 
     // Get local index of facet with respect to the cell
     auto entities_d = c_to_e->links(cell);
-    auto it = std::find(entities_d.data(),
+    const auto *it = std::find(entities_d.data(),
                         entities_d.data() + entities_d.rows(), entities[e]);
     assert(it != (entities_d.data() + entities_d.rows()));
     const int entity_local_index = std::distance(entities_d.data(), it);
 
     // Get cell dofmap
-    auto cell_dofs0 = dofmap0.cell_dofs(cell);
-    auto cell_dofs1 = dofmap1.cell_dofs(cell);
+    auto cell_dofs0 = dofmap0->cell_dofs(cell);
+    auto cell_dofs1 = dofmap1->cell_dofs(cell);
 
     // Loop over facet dofs
     for (int i = 0; i < num_entity_dofs; ++i)
@@ -309,34 +311,35 @@ _locate_dofs_topological(const function::FunctionSpace& V, const int entity_dim,
                          bool remote)
 {
   assert(V.dofmap());
-  const DofMap& dofmap = *V.dofmap();
+  std::shared_ptr<const DofMap> dofmap = V.dofmap();
   assert(V.mesh());
-  mesh::Mesh mesh = *V.mesh();
+  std::shared_ptr<const mesh::Mesh> mesh = V.mesh();
 
-  const int tdim = mesh.topology().dim();
+  const int tdim = mesh->topology().dim();
 
   // Initialise entity-cell connectivity
-  mesh.create_entities(tdim);
-  mesh.create_connectivity(entity_dim, tdim);
+  // FIXME: cleanup these calls? Some of the happen internally again.
+  mesh->topology_mutable().create_entities(tdim);
+  mesh->topology_mutable().create_connectivity(entity_dim, tdim);
 
   // Prepare an element - local dof layout for dofs on entities of the
   // entity_dim
   const int num_cell_entities
-      = mesh::cell_num_entities(mesh.topology().cell_type(), entity_dim);
+      = mesh::cell_num_entities(mesh->topology().cell_type(), entity_dim);
   std::vector<Eigen::Array<int, Eigen::Dynamic, 1>> entity_dofs;
   for (int i = 0; i < num_cell_entities; ++i)
   {
     entity_dofs.push_back(
-        dofmap.element_dof_layout->entity_closure_dofs(entity_dim, i));
+        dofmap->element_dof_layout->entity_closure_dofs(entity_dim, i));
   }
 
-  auto e_to_c = mesh.topology().connectivity(entity_dim, tdim);
+  auto e_to_c = mesh->topology().connectivity(entity_dim, tdim);
   assert(e_to_c);
-  auto c_to_e = mesh.topology().connectivity(tdim, entity_dim);
+  auto c_to_e = mesh->topology().connectivity(tdim, entity_dim);
   assert(c_to_e);
 
   const int num_entity_closure_dofs
-      = dofmap.element_dof_layout->num_entity_closure_dofs(entity_dim);
+      = dofmap->element_dof_layout->num_entity_closure_dofs(entity_dim);
   std::vector<std::int32_t> dofs;
   for (Eigen::Index i = 0; i < entities.rows(); ++i)
   {
@@ -346,13 +349,13 @@ _locate_dofs_topological(const function::FunctionSpace& V, const int entity_dim,
 
     // Get local index of facet with respect to the cell
     auto entities_d = c_to_e->links(cell);
-    auto it = std::find(entities_d.data(),
+    const auto *it = std::find(entities_d.data(),
                         entities_d.data() + entities_d.rows(), entities[i]);
     assert(it != (entities_d.data() + entities_d.rows()));
     const int entity_local_index = std::distance(entities_d.data(), it);
 
     // Get cell dofmap
-    auto cell_dofs = dofmap.cell_dofs(cell);
+    auto cell_dofs = dofmap->cell_dofs(cell);
 
     // Loop over entity dofs
     for (int j = 0; j < num_entity_closure_dofs; j++)
@@ -390,7 +393,9 @@ _locate_dofs_topological(const function::FunctionSpace& V, const int entity_dim,
 //-----------------------------------------------------------------------------
 Eigen::Array<std::int32_t, Eigen::Dynamic, 2> _locate_dofs_geometrical(
     const std::vector<std::reference_wrapper<function::FunctionSpace>>& V,
-    marking_function marker)
+    const std::function<Eigen::Array<bool, Eigen::Dynamic, 1>(
+        const Eigen::Ref<const Eigen::Array<double, 3, Eigen::Dynamic,
+                                            Eigen::RowMajor>>&)>& marker)
 {
   // FIXME: Calling V.tabulate_dof_coordinates() is very expensive,
   // especially when we usually want the boundary dofs only. Add
@@ -401,12 +406,12 @@ Eigen::Array<std::int32_t, Eigen::Dynamic, 2> _locate_dofs_geometrical(
   const function::FunctionSpace& V1 = V.at(1).get();
 
   // Get mesh
-  assert(V0.mesh());
+  std::shared_ptr<const mesh::Mesh> mesh = V0.mesh();
+  assert(mesh);
   assert(V1.mesh());
-  if (V0.mesh() != V1.mesh())
+  if (mesh != V1.mesh())
     throw std::runtime_error("Meshes are not the same.");
-  const mesh::Mesh& mesh = *V1.mesh();
-  const std::size_t tdim = mesh.topology().dim();
+  const int tdim = mesh->topology().dim();
 
   assert(V0.element());
   assert(V1.element());
@@ -425,19 +430,19 @@ Eigen::Array<std::int32_t, Eigen::Dynamic, 2> _locate_dofs_geometrical(
       = marker(dof_coordinates);
 
   // Get dofmaps
-  assert(V0.dofmap());
-  assert(V1.dofmap());
-  const DofMap& dofmap0 = *V0.dofmap();
-  const DofMap& dofmap1 = *V1.dofmap();
+  std::shared_ptr<const fem::DofMap> dofmap0 = V0.dofmap();
+  std::shared_ptr<const fem::DofMap> dofmap1 = V1.dofmap();
+  assert(dofmap0);
+  assert(dofmap1);
 
   // Iterate over cells
-  const mesh::Topology& topology = mesh.topology();
+  const mesh::Topology& topology = mesh->topology();
   std::vector<std::array<std::int32_t, 2>> bc_dofs;
   for (int c = 0; c < topology.connectivity(tdim, 0)->num_nodes(); ++c)
   {
     // Get cell dofmap
-    auto cell_dofs0 = dofmap0.cell_dofs(c);
-    auto cell_dofs1 = dofmap1.cell_dofs(c);
+    auto cell_dofs0 = dofmap0->cell_dofs(c);
+    auto cell_dofs1 = dofmap1->cell_dofs(c);
 
     // Loop over cell dofs and add to bc_dofs if marked.
     for (Eigen::Index i = 0; i < cell_dofs1.rows(); ++i)
@@ -465,9 +470,11 @@ Eigen::Array<std::int32_t, Eigen::Dynamic, 2> _locate_dofs_geometrical(
   return dofs;
 }
 //-----------------------------------------------------------------------------
-Eigen::Array<std::int32_t, Eigen::Dynamic, 1>
-_locate_dofs_geometrical(const function::FunctionSpace& V,
-                         marking_function marker)
+Eigen::Array<std::int32_t, Eigen::Dynamic, 1> _locate_dofs_geometrical(
+    const function::FunctionSpace& V,
+    const std::function<Eigen::Array<bool, Eigen::Dynamic, 1>(
+        const Eigen::Ref<const Eigen::Array<double, 3, Eigen::Dynamic,
+                                            Eigen::RowMajor>>&)>& marker)
 {
   // FIXME: Calling V.tabulate_dof_coordinates() is very expensive,
   // especially when we usually want the boundary dofs only. Add
@@ -512,7 +519,9 @@ fem::locate_dofs_topological(
 Eigen::Array<std::int32_t, Eigen::Dynamic, Eigen::Dynamic>
 fem::locate_dofs_geometrical(
     const std::vector<std::reference_wrapper<function::FunctionSpace>>& V,
-    marking_function marker)
+    const std::function<Eigen::Array<bool, Eigen::Dynamic, 1>(
+        const Eigen::Ref<const Eigen::Array<double, 3, Eigen::Dynamic,
+                                            Eigen::RowMajor>>&)>& marker)
 {
   if (V.size() == 2)
     return _locate_dofs_geometrical(V, marker);
@@ -525,7 +534,7 @@ fem::locate_dofs_geometrical(
 
 //-----------------------------------------------------------------------------
 DirichletBC::DirichletBC(
-    std::shared_ptr<const function::Function> g,
+    const std::shared_ptr<const function::Function>& g,
     const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 1>>&
         V_dofs)
     : _function_space(g->function_space()), _g(g), _dofs(V_dofs.rows(), 2)
@@ -536,13 +545,13 @@ DirichletBC::DirichletBC(
 
   const int owned_size = _function_space->dofmap()->index_map->block_size()
                          * _function_space->dofmap()->index_map->size_local();
-  auto it = std::lower_bound(_dofs.col(0).data(),
+  auto *it = std::lower_bound(_dofs.col(0).data(),
                              _dofs.col(0).data() + _dofs.rows(), owned_size);
   _owned_indices = std::distance(_dofs.col(0).data(), it);
 }
 //-----------------------------------------------------------------------------
 DirichletBC::DirichletBC(
-    std::shared_ptr<const function::Function> g,
+    const std::shared_ptr<const function::Function>& g,
     const Eigen::Ref<const Eigen::Array<std::int32_t, Eigen::Dynamic, 2>>&
         V_g_dofs,
     std::shared_ptr<const function::FunctionSpace> V)
@@ -550,7 +559,7 @@ DirichletBC::DirichletBC(
 {
   const int owned_size = _function_space->dofmap()->index_map->block_size()
                          * _function_space->dofmap()->index_map->size_local();
-  auto it = std::lower_bound(_dofs.col(0).data(),
+  auto *it = std::lower_bound(_dofs.col(0).data(),
                              _dofs.col(0).data() + _dofs.rows(), owned_size);
   _owned_indices = std::distance(_dofs.col(0).data(), it);
 }
