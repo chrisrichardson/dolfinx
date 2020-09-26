@@ -5,7 +5,14 @@ cmake_minimum_required(VERSION 3.12)
 #------------------------------------------------------------------------------
 # Set project name and version number
 
-project(DOLFINX VERSION 2019.2.9.99)
+execute_process(COMMAND python3 -c "import setuptools_scm; print('.'.join(setuptools_scm.get_version().split('.')[:3]))"
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
+  OUTPUT_VARIABLE DOLFIN_VERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+message(STATUS "Got version from SCM: ${DOLFIN_VERSION}")
+
+project(DOLFINX VERSION ${DOLFIN_VERSION})
 
 #------------------------------------------------------------------------------
 # Set CMake options, see `cmake --help-policy CMP000x`

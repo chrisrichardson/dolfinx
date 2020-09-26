@@ -73,10 +73,12 @@ class CMakeBuild(build_ext):
 
 
 setup(name='fenics-dolfinx',
-      version=VERSION,
       author='FEniCS Project',
       description='DOLFIN Python interface',
       long_description='',
+        use_scm_version={'root':'..',
+                         'parentdir_prefix_version': 'dolfinx-'},
+        setup_requires=["setuptools_scm"],
       packages=["dolfinx",
                 "dolfinx.fem",
                 "dolfinx.la",
