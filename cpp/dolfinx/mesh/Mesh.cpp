@@ -61,12 +61,12 @@ Eigen::ArrayXd cell_r(const mesh::Mesh& mesh)
 } // namespace
 
 //-----------------------------------------------------------------------------
-Mesh mesh::create(MPI_Comm comm,
-                  const graph::AdjacencyList<std::int64_t>& cells,
-                  const fem::CoordinateElement& element,
-                  const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic,
-                                     Eigen::RowMajor>& x,
-                  mesh::GhostMode ghost_mode)
+Mesh mesh::create_mesh(MPI_Comm comm,
+                       const graph::AdjacencyList<std::int64_t>& cells,
+                       const fem::CoordinateElement& element,
+                       const Eigen::Array<double, Eigen::Dynamic,
+                                          Eigen::Dynamic, Eigen::RowMajor>& x,
+                       mesh::GhostMode ghost_mode)
 {
   if (ghost_mode == mesh::GhostMode::shared_vertex)
     throw std::runtime_error("Ghost mode via vertex currently disabled.");
@@ -137,20 +137,6 @@ Mesh mesh::create(MPI_Comm comm,
 }
 //-----------------------------------------------------------------------------
 
-//-----------------------------------------------------------------------------
-Mesh::Mesh(
-    MPI_Comm comm, mesh::CellType,
-    const Eigen::Ref<const Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic,
-                                        Eigen::RowMajor>>& x,
-    const Eigen::Ref<const Eigen::Array<
-        std::int64_t, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& cells,
-    const fem::CoordinateElement& element, const std::vector<std::int64_t>&,
-    const GhostMode ghost_mode, std::int32_t)
-    : Mesh(mesh::create(comm, graph::AdjacencyList<std::int64_t>(cells),
-                        element, x, ghost_mode))
-{
-  // Do nothing
-}
 //-----------------------------------------------------------------------------
 Topology& Mesh::topology() { return _topology; }
 //-----------------------------------------------------------------------------

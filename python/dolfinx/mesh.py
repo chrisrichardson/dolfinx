@@ -9,6 +9,11 @@ import types
 import numpy
 import ufl
 from dolfinx import cpp, fem
+from dolfinx.cpp.mesh import create_meshtags
+
+__all__ = [
+    "locate_entities", "locate_entities_boundary", "refine", "create_mesh", "create_meshtags"
+]
 
 
 def locate_entities(mesh: cpp.mesh.Mesh,
@@ -75,7 +80,7 @@ def locate_entities_boundary(mesh: cpp.mesh.Mesh,
 
 _meshtags_types = {
     numpy.int8: cpp.mesh.MeshTags_int8,
-    numpy.intc: cpp.mesh.MeshTags_int,
+    numpy.int32: cpp.mesh.MeshTags_int32,
     numpy.int64: cpp.mesh.MeshTags_int64,
     numpy.double: cpp.mesh.MeshTags_double
 }
@@ -91,13 +96,16 @@ def refine(mesh, cell_markers=None, redistribute=True):
     return mesh_refined
 
 
-def Mesh(comm, cell_type, x, cells, ghosts, degree=1, ghost_mode=cpp.mesh.GhostMode.none):
-    """Crete a mesh from topology and geometry data"""
-    cell = ufl.Cell(cpp.mesh.to_string(cell_type), geometric_dimension=x.shape[1])
-    domain = ufl.Mesh(ufl.VectorElement("Lagrange", cell, degree))
+def create_mesh(comm, cells, x, domain, ghost_mode=cpp.mesh.GhostMode.shared_facet):
+    """Create a mesh from topology and geometry data"""
     cmap = fem.create_coordinate_map(domain)
+    try:
+        mesh = cpp.mesh.create_mesh(comm, cells, cmap, x, ghost_mode)
+    except TypeError:
+        mesh = cpp.mesh.create_mesh(comm, cpp.graph.AdjacencyList_int64(numpy.cast['int64'](cells)),
+                                    cmap, x, ghost_mode)
 
-    mesh = cpp.mesh.Mesh(comm, cell_type, x, cells, cmap, ghosts, ghost_mode)
+    # Attach UFL data (used when passing a mesh into UFL functions)
     domain._ufl_cargo = mesh
     mesh._ufl_domain = domain
     return mesh
@@ -106,7 +114,7 @@ def Mesh(comm, cell_type, x, cells, ghosts, degree=1, ghost_mode=cpp.mesh.GhostM
 def MeshTags(mesh, dim, indices, values):
 
     if isinstance(values, int):
-        values = numpy.full(indices.shape, values, dtype=numpy.intc)
+        values = numpy.full(indices.shape, values, dtype=numpy.int32)
     elif isinstance(values, float):
         values = numpy.full(indices.shape, values, dtype=numpy.double)
 

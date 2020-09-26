@@ -17,8 +17,43 @@ namespace py = pybind11;
 
 namespace dolfinx_wrappers
 {
+
+template <typename T>
+void declare_adjacency_list(py::module& m, std::string type)
+{
+  std::string pyclass_name = std::string("AdjacencyList_") + type;
+  py::class_<dolfinx::graph::AdjacencyList<T>,
+             std::shared_ptr<dolfinx::graph::AdjacencyList<T>>>(
+      m, pyclass_name.c_str(), "Adjacency List")
+      .def(py::init<std::int32_t>())
+      .def(py::init<const Eigen::Ref<const Eigen::Array<
+               T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>&>())
+      .def(
+          "links",
+          [](const dolfinx::graph::AdjacencyList<T>& self, int i) {
+            return self.links(i);
+          },
+          "Links (edges) of a node",
+          py::return_value_policy::reference_internal)
+      .def_property_readonly("array", &dolfinx::graph::AdjacencyList<T>::array,
+                             py::return_value_policy::reference_internal)
+      .def_property_readonly("offsets",
+                             &dolfinx::graph::AdjacencyList<T>::offsets,
+                             "Index to each node in the links array",
+                             py::return_value_policy::reference_internal)
+      .def_property_readonly("num_nodes",
+                             &dolfinx::graph::AdjacencyList<T>::num_nodes)
+      .def("__eq__", &dolfinx::graph::AdjacencyList<T>::operator==,
+           py::is_operator())
+      .def("__repr__", &dolfinx::graph::AdjacencyList<T>::str)
+      .def("__len__", &dolfinx::graph::AdjacencyList<T>::num_nodes);
+}
+
 void graph(py::module& m)
 {
+
+  declare_adjacency_list<std::int32_t>(m, "int32");
+  declare_adjacency_list<std::int64_t>(m, "int64");
 
   m.def("create_local_adjacency_list",
         &dolfinx::graph::Partitioning::create_local_adjacency_list);
@@ -49,58 +84,5 @@ void graph(py::module& m)
         &dolfinx::graph::Partitioning::compute_local_to_global_links);
   m.def("compute_local_to_local",
         &dolfinx::graph::Partitioning::compute_local_to_local);
-
-  // TODO: Use macro to handle different types
-
-  // dolfinx::graph::AdjacencyList class
-  py::class_<dolfinx::graph::AdjacencyList<std::int64_t>,
-             std::shared_ptr<dolfinx::graph::AdjacencyList<std::int64_t>>>(
-      m, "AdjacencyList64", "Adjacency list")
-      .def(py::init<std::int32_t>())
-      .def(py::init<const Eigen::Ref<
-               const Eigen::Array<std::int64_t, Eigen::Dynamic, Eigen::Dynamic,
-                                  Eigen::RowMajor>>&>())
-      .def(
-          "links",
-          [](const dolfinx::graph::AdjacencyList<std::int64_t>& self, int i) {
-            return self.links(i);
-          },
-          "Links (edges) of a node",
-          py::return_value_policy::reference_internal)
-      .def("array", &dolfinx::graph::AdjacencyList<std::int64_t>::array,
-           py::return_value_policy::reference_internal)
-      .def("offsets", &dolfinx::graph::AdjacencyList<std::int64_t>::offsets,
-           "Index to each node in the links array",
-           py::return_value_policy::reference_internal)
-      .def_property_readonly(
-          "num_nodes", &dolfinx::graph::AdjacencyList<std::int64_t>::num_nodes)
-      .def("__eq__", &dolfinx::graph::AdjacencyList<std::int64_t>::operator==,
-           py::is_operator())
-      .def("__repr__", &dolfinx::graph::AdjacencyList<std::int64_t>::str)
-      .def("__len__", &dolfinx::graph::AdjacencyList<std::int64_t>::num_nodes);
-
-  // dolfinx::graph::AdjacencyList class
-  py::class_<dolfinx::graph::AdjacencyList<std::int32_t>,
-             std::shared_ptr<dolfinx::graph::AdjacencyList<std::int32_t>>>(
-      m, "AdjacencyList", "Adjacency list")
-      .def(py::init<std::int32_t>())
-      .def(
-          "links",
-          [](const dolfinx::graph::AdjacencyList<std::int32_t>& self, int i) {
-            return self.links(i);
-          },
-          "Links (edges) of a node",
-          py::return_value_policy::reference_internal)
-      .def("array", &dolfinx::graph::AdjacencyList<std::int32_t>::array,
-           "All edges", py::return_value_policy::reference_internal)
-      .def("offsets", &dolfinx::graph::AdjacencyList<std::int32_t>::offsets,
-           "Index to each node in the links array",
-           py::return_value_policy::reference_internal)
-      .def_property_readonly(
-          "num_nodes", &dolfinx::graph::AdjacencyList<std::int32_t>::num_nodes)
-      .def("__eq__", &dolfinx::graph::AdjacencyList<std::int32_t>::operator==,
-           py::is_operator())
-      .def("__repr__", &dolfinx::graph::AdjacencyList<std::int32_t>::str)
-      .def("__len__", &dolfinx::graph::AdjacencyList<std::int32_t>::num_nodes);
 }
 } // namespace dolfinx_wrappers

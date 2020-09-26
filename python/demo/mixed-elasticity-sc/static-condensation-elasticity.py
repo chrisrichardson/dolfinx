@@ -141,8 +141,8 @@ def tabulate_condensed_tensor_A(A_, w_, c_, coords_, entity_local_index, permuta
 
 
 # Prepare an empty Form and set the condensed tabulation kernel
-a_cond = dolfinx.cpp.fem.Form([U._cpp_object, U._cpp_object])
-a_cond.set_tabulate_tensor(dolfinx.fem.FormIntegrals.Type.cell, -1, tabulate_condensed_tensor_A.address)
+a_cond = dolfinx.cpp.fem.Form([U._cpp_object, U._cpp_object], False)
+a_cond.set_tabulate_tensor(dolfinx.fem.IntegralType.cell, -1, tabulate_condensed_tensor_A.address)
 
 A_cond = dolfinx.fem.assemble_matrix(a_cond, [bc])
 A_cond.assemble()
@@ -164,10 +164,12 @@ A.assemble()
 bb_tree = dolfinx.cpp.geometry.BoundingBoxTree(mesh, 2)
 
 # Check against standard table value
-p = [48.0, 52.0, 0.0]
-cell = dolfinx.cpp.geometry.compute_first_collision(bb_tree, p)
-if cell >= 0:
-    value = uc.eval(p, numpy.asarray(cell))
+p = numpy.array([48.0, 52.0, 0.0], dtype=numpy.float64)
+cell_candidates = dolfinx.cpp.geometry.compute_collisions_point(bb_tree, p)
+cell = dolfinx.cpp.geometry.select_colliding_cells(mesh, cell_candidates, p, 1)
+
+if len(cell) > 0:
+    value = uc.eval(p, cell)
     print(value[1])
     assert numpy.isclose(value[1], 23.95, rtol=1.e-2)
 

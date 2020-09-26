@@ -8,13 +8,12 @@ import os
 
 import numpy as np
 import pytest
-from mpi4py import MPI
-
 from dolfinx.cpp.mesh import CellType
 from dolfinx.generation import UnitCubeMesh
 from dolfinx.io import XDMFFile
 from dolfinx.mesh import MeshTags, locate_entities
 from dolfinx_utils.test.fixtures import tempdir
+from mpi4py import MPI
 
 assert (tempdir)
 
@@ -57,12 +56,15 @@ def test_3d(tempdir, cell_type, encoding):
         file.write_mesh(mesh)
         file.write_meshtags(mt)
         file.write_meshtags(mt_lines)
+        file.write_information("units", "mm")
 
     with XDMFFile(comm, filename, "r", encoding=encoding) as file:
         mesh_in = file.read_mesh()
         mesh_in.topology.create_connectivity_all()
         mt_in = file.read_meshtags(mesh_in, "facets")
         mt_lines_in = file.read_meshtags(mesh_in, "lines")
+        units = file.read_information("units")
+        assert units == "mm"
         assert mt_in.name == "facets"
         assert mt_lines_in.name == "lines"
 
