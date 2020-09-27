@@ -12,14 +12,29 @@ if sys.version_info < (3, 5):
     print("Python 3.5 or higher required, please upgrade.")
     sys.exit(1)
 
-VERSION = "2019.2.0.dev0"
-RESTRICT_REQUIREMENTS = ">=2019.2.0.dev0,<2019.3"
+
+def get_git_tag():
+    """Return latest tag in repository."""
+    try:
+        tag = subprocess.check_output(['git', 'describe', '--abbrev=0'])
+    except (OSError, subprocess.CalledProcessError) as e:
+        print('Retrieving git tag did not succeed with exception:')
+        print('"{}"'.format(e))
+        print()
+        print('Tag will be set to "2019.1.0"!')
+        return "2019.1.0"
+    else:
+        return tag.decode('utf-8').strip()
+
+
+RESTRICT_REQUIREMENTS = ">=" + get_git_tag()
+print(RESTRICT_REQUIREMENTS)
 
 REQUIREMENTS = [
     "numpy",
     "mpi4py",
     "petsc4py",
-    "fenics-ffcx",
+    "fenics-ffcx{}".format(RESTRICT_REQUIREMENTS),
     "fenics-ufl{}".format(RESTRICT_REQUIREMENTS),
 ]
 
