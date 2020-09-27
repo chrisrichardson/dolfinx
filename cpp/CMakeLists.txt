@@ -4,13 +4,17 @@ cmake_minimum_required(VERSION 3.12)
 
 #------------------------------------------------------------------------------
 # Set project name and version number
-
-execute_process(COMMAND python3 -c "import setuptools_scm; print('.'.join(setuptools_scm.get_version().split('.')[:3]))"
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
+find_program(GIT_FOUND git)
+if (GIT_FOUND)
+execute_process(COMMAND git describe --abbrev=0
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   OUTPUT_VARIABLE DOLFIN_VERSION
   OUTPUT_STRIP_TRAILING_WHITESPACE)
+else()
+  set(DOLFIN_VERSION "unknown")
+endif()
 
-message(STATUS "Got version from SCM: ${DOLFIN_VERSION}")
+message(STATUS "Got version from Git tags: ${DOLFIN_VERSION}")
 
 project(DOLFINX VERSION ${DOLFIN_VERSION})
 
@@ -37,8 +41,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 #------------------------------------------------------------------------------
 # Get GIT changeset, if available
-
-find_program(GIT_FOUND git)
 if (GIT_FOUND)
   # Get the commit hash of the working branch
   execute_process(COMMAND git rev-parse HEAD
