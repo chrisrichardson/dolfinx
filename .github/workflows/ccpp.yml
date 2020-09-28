@@ -74,7 +74,10 @@ jobs:
           ctest -R demo -R mpi_2
 
       - name: Build Python interface
-        run: cd python && python3 setup.py install
+        run: |
+          pip3 install pkgconfig
+          cd python
+          python3 setup.py install
       - name: Build Python interface documentation
         run: |
           cd python/demo && python3 ./generate-demo-files.py
