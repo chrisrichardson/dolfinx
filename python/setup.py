@@ -2,6 +2,7 @@ import os
 import platform
 import re
 import subprocess
+import pkgconfig
 import sys
 from distutils.version import LooseVersion
 
@@ -13,21 +14,14 @@ if sys.version_info < (3, 5):
     sys.exit(1)
 
 
-def get_git_tag():
-    """Return latest tag in repository."""
-    try:
-        tag = subprocess.check_output(['git', 'describe', '--abbrev=0'])
-    except (OSError, subprocess.CalledProcessError) as e:
-        print('Retrieving git tag did not succeed with exception:')
-        print('"{}"'.format(e))
-        print()
-        print('Tag will be set to "2019.1.0"!')
-        return "2019.1.0"
-    else:
-        return tag.decode('utf-8').strip()
+def get_dolfin_version():
+    w = {k: v for k, v in pkgconfig.parse("dolfinx")['define_macros']}
+    return w['DOLFINX_VERSION']
+
+VERSION = get_dolfin_version()
 
 
-RESTRICT_REQUIREMENTS = ">=" + get_git_tag()
+RESTRICT_REQUIREMENTS = ">=" + VERSION
 print(RESTRICT_REQUIREMENTS)
 
 REQUIREMENTS = [
@@ -90,10 +84,8 @@ class CMakeBuild(build_ext):
 setup(name='fenics-dolfinx',
       author='FEniCS Project',
       description='DOLFIN Python interface',
+      version=VERSION,
       long_description='',
-        use_scm_version={'root':'..',
-                         'parentdir_prefix_version': 'dolfinx-'},
-        setup_requires=["setuptools_scm"],
       packages=["dolfinx",
                 "dolfinx.fem",
                 "dolfinx.la",
