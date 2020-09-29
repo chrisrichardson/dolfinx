@@ -8,15 +8,21 @@ find_program(GIT_FOUND git)
 if (GIT_FOUND)
 execute_process(COMMAND git describe --abbrev=0
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  OUTPUT_VARIABLE DOLFIN_VERSION
+  OUTPUT_VARIABLE DOLFINX_VERSION
   OUTPUT_STRIP_TRAILING_WHITESPACE)
-else()
-  set(DOLFIN_VERSION "unknown")
 endif()
 
-message(STATUS "Got version from Git tags: ${DOLFIN_VERSION}")
+if (NOT DOLFINX_VERSION AND DEFINED ENV{DOLFINX_VERSION})
+  set(DOLFINX_VERSION $ENV{DOLFINX_VERSION})
+endif()
 
-project(DOLFINX VERSION ${DOLFIN_VERSION})
+if (DOLFIN_VERSION)
+message(STATUS "Got version from Git tags: ${DOLFINX_VERSION}")
+else()
+message(CMAKE_FATAL_ERROR "No VERSION found. Version is usually extracted from the git tags in the repository. It may be that this install has no git history (e.g. install from .tar.gz), in which case the version can be specified manually by setting the DOLFINX_VERSION environment variable.")
+endif()
+
+project(DOLFINX VERSION ${DOLFINX_VERSION})
 
 #------------------------------------------------------------------------------
 # Set CMake options, see `cmake --help-policy CMP000x`
