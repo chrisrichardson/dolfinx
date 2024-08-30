@@ -87,8 +87,8 @@ public:
 
 #ifndef NDEBUG
     // Check that all ghost indices are non-negative
-    std::for_each(
-        ghosts.begin(), ghosts.end(), (auto idx) { assert(idx >= 0); });
+    std::for_each(ghosts.begin(), ghosts.end(),
+                  [](auto idx) { assert(idx >= 0); });
 #endif
 
     std::vector<int> owners_sorted(owners.size());
@@ -136,9 +136,8 @@ public:
 
 #ifndef NDEBUG
     // Check that all indices are non-negative
-    std::for_each(
-        ghosts_sorted.begin(), ghosts_sorted.end(),
-        (auto idx) { assert(idx >= 0); });
+    std::for_each(ghosts_sorted.begin(), ghosts_sorted.end(),
+                  [](auto idx) { assert(idx >= 0); });
 #endif
 
     // Send ghost global indices to owning rank, and receive owned
