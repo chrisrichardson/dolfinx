@@ -84,6 +84,13 @@ public:
     // Sort (i) ghost indices and (ii) ghost index owners by rank
     // (using perm array)
     std::span ghosts = map.ghosts();
+
+#ifndef NDEBUG
+    // Check that all ghost indices are non-negative
+    std::for_each(
+        ghosts.begin(), ghosts.end(), (auto idx) { assert(idx >= 0); });
+#endif
+
     std::vector<int> owners_sorted(owners.size());
     std::vector<std::int64_t> ghosts_sorted(owners.size());
     std::transform(perm.begin(), perm.end(), owners_sorted.begin(),
@@ -126,7 +133,13 @@ public:
                      std::next(_displs_local.begin()));
 
     assert((std::int32_t)ghosts_sorted.size() == _displs_remote.back());
-    assert((std::int32_t)ghosts_sorted.size() == _displs_remote.back());
+
+#ifndef NDEBUG
+    // Check that all indices are non-negative
+    std::for_each(
+        ghosts_sorted.begin(), ghosts_sorted.end(),
+        (auto idx) { assert(idx >= 0); });
+#endif
 
     // Send ghost global indices to owning rank, and receive owned
     // indices that are ghosts on other ranks
