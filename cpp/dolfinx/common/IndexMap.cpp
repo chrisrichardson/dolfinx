@@ -830,6 +830,13 @@ IndexMap::IndexMap(MPI_Comm comm, std::int32_t local_size,
       _owners(owners.begin(), owners.end()), _src(src_dest[0]),
       _dest(src_dest[1])
 {
+
+#ifndef NDEBUG
+  // Check that all ghost indices are non-negative
+  std::for_each(ghosts.begin(), ghosts.end(),
+                [](auto idx) { assert(idx >= 0); });
+#endif
+
   assert(ghosts.size() == owners.size());
   assert(std::is_sorted(src_dest[0].begin(), src_dest[0].end()));
   assert(std::is_sorted(src_dest[1].begin(), src_dest[1].end()));
