@@ -94,7 +94,7 @@ public:
 
 #ifndef NDEBUG
     // Check IndexMap
-    auto ghosts = dofmap->index_map.ghosts();
+    auto ghosts = dofmap->index_map->ghosts();
     std::for_each(ghosts.begin(), ghosts.end(),
                   [](auto idx) { assert(idx >= 0); });
 #endif
