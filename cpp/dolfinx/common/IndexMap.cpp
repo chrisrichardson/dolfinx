@@ -464,6 +464,11 @@ compute_submap_ghost_indices(std::span<const int> submap_src,
   for (std::size_t i = 0; i < recv_gidx.size(); ++i)
     ghost_submap_gidx[ghost_perm[i]] = recv_gidx[i];
 
+#ifndef NDEBUG
+  for (auto idx : ghost_submap_gidx)
+    assert(idx >= 0);
+#endif
+
   return ghost_submap_gidx;
 }
 } // namespace

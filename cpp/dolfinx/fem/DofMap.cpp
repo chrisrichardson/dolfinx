@@ -60,6 +60,7 @@ fem::DofMap build_collapsed_dofmap(const DofMap& dofmap_view,
   std::vector<std::int32_t> sub_imap_to_imap;
   if (bs_view == 1)
   {
+    LOG(INFO) << "bs_view = 1";
     auto [_index_map, _sub_imap_to_imap] = common::create_sub_index_map(
         *dofmap_view.index_map, dofs_view, common::IndexMapOrder::preserve);
     index_map = std::make_shared<common::IndexMap>(std::move(_index_map));
@@ -67,6 +68,7 @@ fem::DofMap build_collapsed_dofmap(const DofMap& dofmap_view,
   }
   else
   {
+    LOG(INFO) << "bs_view > 1";
     std::vector<std::int32_t> indices;
     indices.reserve(dofs_view.size());
     std::transform(dofs_view.begin(), dofs_view.end(),
@@ -77,6 +79,13 @@ fem::DofMap build_collapsed_dofmap(const DofMap& dofmap_view,
     index_map = std::make_shared<common::IndexMap>(std::move(_index_map));
     sub_imap_to_imap = std::move(_sub_imap_to_imap);
   }
+
+#ifndef NDEBUG
+  // Check IndexMap
+  auto ghosts = index_map->ghosts();
+  std::for_each(ghosts.begin(), ghosts.end(),
+                [](auto idx) { assert(idx >= 0); });
+#endif
 
   // Create a map from old dofs to new dofs
   std::vector<std::int32_t> old_to_new(dofs_view.back() + bs_view, -1);
