@@ -119,6 +119,13 @@ public:
     // Create new collapsed FunctionSpace
     auto [V, map] = _function_space->collapse();
 
+#ifndef NDEBUG
+    // Check IndexMap
+    auto ghosts = V.dofmap()->index_map->ghosts();
+    std::for_each(ghosts.begin(), ghosts.end(),
+                  [](auto idx) { assert(idx >= 0); });
+#endif
+
     // Create new vector
     auto x = std::make_shared<la::Vector<value_type>>(
         V.dofmap()->index_map, V.dofmap()->index_map_bs());

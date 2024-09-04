@@ -162,6 +162,13 @@ public:
     auto collapsed_dofmap
         = std::make_shared<DofMap>(std::move(_collapsed_dofmap));
 
+#ifndef NDEBUG
+    // Check IndexMap
+    auto ghosts = collapsed_dofmap->index_map->ghosts();
+    std::for_each(ghosts.begin(), ghosts.end(),
+                  [](auto idx) { assert(idx >= 0); });
+#endif
+
     return {
         FunctionSpace(_mesh, _element, collapsed_dofmap,
                       compute_value_shape(_element, _mesh->topology()->dim(),
