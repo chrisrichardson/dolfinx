@@ -92,6 +92,13 @@ public:
     auto dofmap
         = std::make_shared<DofMap>(_dofmap->extract_sub_dofmap(component));
 
+#ifndef NDEBUG
+    // Check IndexMap
+    auto ghosts = dofmap->index_map.ghosts();
+    std::for_each(ghosts.begin(), ghosts.end(),
+                  [](auto idx) { assert(idx >= 0); });
+#endif
+
     // Create new sub space
     FunctionSpace sub_space(_mesh, element, dofmap,
                             compute_value_shape(element,

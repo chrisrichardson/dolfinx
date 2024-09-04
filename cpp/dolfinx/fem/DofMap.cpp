@@ -225,6 +225,14 @@ std::pair<DofMap, std::vector<std::int32_t>> DofMap::collapse(
 
       auto [_index_map, bs, dofmaps] = build_dofmap_data(
           comm, topology, {collapsed_dof_layout}, reorder_fn);
+
+#ifndef NDEBUG
+      // Check IndexMap
+      auto ghosts = _index_map.ghosts();
+      std::for_each(ghosts.begin(), ghosts.end(),
+                    [](auto idx) { assert(idx >= 0); });
+#endif
+
       auto index_map
           = std::make_shared<common::IndexMap>(std::move(_index_map));
       return DofMap(layout, index_map, bs, std::move(dofmaps.front()), bs);
